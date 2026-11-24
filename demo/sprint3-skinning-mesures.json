@@ -1,0 +1,654 @@
+{
+  "blender": "5.2.1 LTS",
+  "blender_build": "9e2066aef7ef",
+  "rigify": [
+    0,
+    6,
+    10
+  ],
+  "renderer": "Cycles CPU, 16 samples, denoised",
+  "baseline": "Blender DEF-only Bone Heat; normalize all positive weights, no cap or smoothing; linear. Same Sprint 3 fit as all variants, not a run of Sprint 2.",
+  "after": "SAS Sprint 3 automatic_skinning(separate=True), linear, smoothed and capped at four influences",
+  "variant": "Identical Sprint 3 weights and DEF poses, only Preserve Volume enabled (Blender DQS)",
+  "pose_command_angle_columns": [
+    "elevation.L (-Y character)",
+    "elbow.L (X local)",
+    "upper-arm twist.L (Y local)",
+    "thigh.R (X local)",
+    "shin.R (X local)"
+  ],
+  "poses": [
+    {
+      "frame": 1,
+      "name": "Repos",
+      "degrees": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "frame": 9,
+      "name": "Élévation",
+      "degrees": [
+        105,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "frame": 17,
+      "name": "Flexion",
+      "degrees": [
+        0,
+        120,
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "frame": 25,
+      "name": "Torsion",
+      "degrees": [
+        0,
+        65,
+        100,
+        0,
+        0
+      ]
+    },
+    {
+      "frame": 33,
+      "name": "Combiné",
+      "degrees": [
+        62,
+        100,
+        25,
+        45,
+        -105
+      ]
+    }
+  ],
+  "edge_selection": "Rest edge midpoint in sphere centered on the corresponding rest DEF head; identical edges across methods and frames.",
+  "joint_radius_m": {
+    "épaule.L": 0.115,
+    "coude.L": 0.085
+  },
+  "fixtures": {
+    "Élancé": {
+      "stance_detected": "A",
+      "morph_scales": {
+        "width": 0.91,
+        "depth": 0.83,
+        "legs": 1.16,
+        "arms": 1.03
+      },
+      "vertices": 22800,
+      "edges": 45596,
+      "faces": 22798,
+      "def_bones": 35,
+      "weight_stats": {
+        "Bone Heat normalisé": {
+          "max_influences": 7,
+          "vertices_over_4": 1916,
+          "max_sum_error": 4.889443516731262e-08,
+          "mean_squared_weight_jump": 0.005545867668014809
+        },
+        "Sprint 3 linéaire": {
+          "max_influences": 4,
+          "vertices_over_4": 0,
+          "max_sum_error": 4.470348358154297e-08,
+          "mean_squared_weight_jump": 0.005443767373198838
+        }
+      },
+      "local_edge_count": {
+        "épaule.L": 2575,
+        "coude.L": 1250
+      },
+      "poses": {
+        "Repos": {
+          "Bone Heat normalisé": {
+            "épaule.L": {
+              "q05_length_ratio": 0.999998517756442,
+              "median_length_ratio": 1.0,
+              "q95_length_ratio": 1.000000853939005,
+              "pct_edges_below_0.8": 0.0,
+              "pct_edges_above_1.25": 0.0
+            },
+            "coude.L": {
+              "q05_length_ratio": 0.9999913835681835,
+              "median_length_ratio": 1.0,
+              "q95_length_ratio": 1.0000108522231286,
+              "pct_edges_below_0.8": 0.0,
+              "pct_edges_above_1.25": 0.0
+            }
+          },
+          "Sprint 3 linéaire": {
+            "épaule.L": {
+              "q05_length_ratio": 0.9999985092230717,
+              "median_length_ratio": 1.0,
+              "q95_length_ratio": 1.0000008985261353,
+              "pct_edges_below_0.8": 0.0,
+              "pct_edges_above_1.25": 0.0
+            },
+            "coude.L": {
+              "q05_length_ratio": 0.9999913488436152,
+              "median_length_ratio": 1.0,
+              "q95_length_ratio": 1.0000108899971276,
+              "pct_edges_below_0.8": 0.0,
+              "pct_edges_above_1.25": 0.0
+            }
+          },
+          "Sprint 3 Preserve Volume": {
+            "épaule.L": {
+              "q05_length_ratio": 0.9999964701990972,
+              "median_length_ratio": 0.9999998459454358,
+              "q95_length_ratio": 1.0000024460399093,
+              "pct_edges_below_0.8": 0.0,
+              "pct_edges_above_1.25": 0.0
+            },
+            "coude.L": {
+              "q05_length_ratio": 0.9999894193916988,
+              "median_length_ratio": 1.0000002557025898,
+              "q95_length_ratio": 1.0000095994774867,
+              "pct_edges_below_0.8": 0.0,
+              "pct_edges_above_1.25": 0.0
+            }
+          }
+        },
+        "Élévation": {
+          "Bone Heat normalisé": {
+            "épaule.L": {
+              "q05_length_ratio": 0.3783623125862803,
+              "median_length_ratio": 0.9409361964814773,
+              "q95_length_ratio": 1.4562995751822514,
+              "pct_edges_below_0.8": 31.728155339805824,
+              "pct_edges_above_1.25": 9.553398058252426
+            },
+            "coude.L": {
+              "q05_length_ratio": 0.9695340523880566,
+              "median_length_ratio": 0.9999920419476501,
+              "q95_length_ratio": 1.0333385599361806,
+              "pct_edges_below_0.8": 0.0,
+              "pct_edges_above_1.25": 0.0
+            }
+          },
+          "Sprint 3 linéaire": {
+            "épaule.L": {
+              "q05_length_ratio": 0.3770977485178427,
+              "median_length_ratio": 0.9410460758663698,
+              "q95_length_ratio": 1.4761120651455106,
+              "pct_edges_below_0.8": 32.0,
+              "pct_edges_above_1.25": 10.135922330097086
+            },
+            "coude.L": {
+              "q05_length_ratio": 0.970000589693563,
+              "median_length_ratio": 0.9998611992903249,
+              "q95_length_ratio": 1.0339044501356611,
+              "pct_edges_below_0.8": 0.0,
+              "pct_edges_above_1.25": 0.0
+            }
+          },
+          "Sprint 3 Preserve Volume": {
+            "épaule.L": {
+              "q05_length_ratio": 0.4210344569887179,
+              "median_length_ratio": 0.9798687689333151,
+              "q95_length_ratio": 1.563985959146002,
+              "pct_edges_below_0.8": 22.174757281553397,
+              "pct_edges_above_1.25": 12.155339805825243
+            },
+            "coude.L": {
+              "q05_length_ratio": 0.9703395106558297,
+              "median_length_ratio": 0.9999695342975156,
+              "q95_length_ratio": 1.034873596221711,
+              "pct_edges_below_0.8": 0.0,
+              "pct_edges_above_1.25": 0.0
+            }
+          }
+        },
+        "Flexion": {
+          "Bone Heat normalisé": {
+            "épaule.L": {
+              "q05_length_ratio": 0.9999898442823862,
+              "median_length_ratio": 1.0,
+              "q95_length_ratio": 1.0000101204770315,
+              "pct_edges_below_0.8": 0.0,
+              "pct_edges_above_1.25": 0.0
+            },
+            "coude.L": {
+              "q05_length_ratio": 0.6488089401975544,
+              "median_length_ratio": 1.0042974030161522,
+              "q95_length_ratio": 1.3297895894407739,
+              "pct_edges_below_0.8": 11.200000000000001,
+              "pct_edges_above_1.25": 10.56
+            }
+          },
+          "Sprint 3 linéaire": {
+            "épaule.L": {
+              "q05_length_ratio": 0.9999898442823862,
+              "median_length_ratio": 1.0,
+              "q95_length_ratio": 1.0000102770688533,
+              "pct_edges_below_0.8": 0.0,
+              "pct_edges_above_1.25": 0.0
+            },
+            "coude.L": {
+              "q05_length_ratio": 0.6468633788958094,
+              "median_length_ratio": 1.00907499583005,
+              "q95_length_ratio": 1.3190469402342948,
+              "pct_edges_below_0.8": 11.200000000000001,
+              "pct_edges_above_1.25": 9.36
+            }
+          },
+          "Sprint 3 Preserve Volume": {
+            "épaule.L": {
+              "q05_length_ratio": 0.9999970275567757,
+              "median_length_ratio": 0.9999999526699793,
+              "q95_length_ratio": 1.0000017119287141,
+              "pct_edges_below_0.8": 0.0,
+              "pct_edges_above_1.25": 0.0
+            },
+            "coude.L": {
+              "q05_length_ratio": 0.6069863706172377,
+              "median_length_ratio": 1.0066273323177308,
+              "q95_length_ratio": 1.7121675912687029,
+              "pct_edges_below_0.8": 11.68,
+              "pct_edges_above_1.25": 15.840000000000002
+            }
+          }
+        },
+        "Torsion": {
+          "Bone Heat normalisé": {
+            "épaule.L": {
+              "q05_length_ratio": 0.9546673085287322,
+              "median_length_ratio": 1.0,
+              "q95_length_ratio": 1.0437144779573324,
+              "pct_edges_below_0.8": 0.0,
+              "pct_edges_above_1.25": 0.0
+            },
+            "coude.L": {
+              "q05_length_ratio": 0.7024836550395269,
+              "median_length_ratio": 1.0023786419162721,
+              "q95_length_ratio": 1.26637714296636,
+              "pct_edges_below_0.8": 9.28,
+              "pct_edges_above_1.25": 6.239999999999999
+            }
+          },
+          "Sprint 3 linéaire": {
+            "épaule.L": {
+              "q05_length_ratio": 0.9548743989354171,
+              "median_length_ratio": 1.0,
+              "q95_length_ratio": 1.0433504356359788,
+              "pct_edges_below_0.8": 0.0,
+              "pct_edges_above_1.25": 0.0
+            },
+            "coude.L": {
+              "q05_length_ratio": 0.6968701216051093,
+              "median_length_ratio": 1.006015477969913,
+              "q95_length_ratio": 1.2696342807195227,
+              "pct_edges_below_0.8": 9.36,
+              "pct_edges_above_1.25": 6.0
+            }
+          },
+          "Sprint 3 Preserve Volume": {
+            "épaule.L": {
+              "q05_length_ratio": 0.9566172071124794,
+              "median_length_ratio": 0.9999999416429746,
+              "q95_length_ratio": 1.0505197478627926,
+              "pct_edges_below_0.8": 0.0,
+              "pct_edges_above_1.25": 0.03883495145631068
+            },
+            "coude.L": {
+              "q05_length_ratio": 0.773296887403163,
+              "median_length_ratio": 1.0141864376640857,
+              "q95_length_ratio": 1.4556121945288099,
+              "pct_edges_below_0.8": 7.04,
+              "pct_edges_above_1.25": 11.600000000000001
+            }
+          }
+        },
+        "Combiné": {
+          "Bone Heat normalisé": {
+            "épaule.L": {
+              "q05_length_ratio": 0.5492398252575449,
+              "median_length_ratio": 0.9577778809063008,
+              "q95_length_ratio": 1.301076897036835,
+              "pct_edges_below_0.8": 19.41747572815534,
+              "pct_edges_above_1.25": 6.407766990291262
+            },
+            "coude.L": {
+              "q05_length_ratio": 0.6608757952412243,
+              "median_length_ratio": 1.0015524724226248,
+              "q95_length_ratio": 1.3023378156535486,
+              "pct_edges_below_0.8": 12.24,
+              "pct_edges_above_1.25": 8.4
+            }
+          },
+          "Sprint 3 linéaire": {
+            "épaule.L": {
+              "q05_length_ratio": 0.5511891019695394,
+              "median_length_ratio": 0.9573852966552527,
+              "q95_length_ratio": 1.3085214121836461,
+              "pct_edges_below_0.8": 20.116504854368934,
+              "pct_edges_above_1.25": 6.796116504854369
+            },
+            "coude.L": {
+              "q05_length_ratio": 0.6524045032561584,
+              "median_length_ratio": 1.0055846502220982,
+              "q95_length_ratio": 1.2983376401952775,
+              "pct_edges_below_0.8": 12.479999999999999,
+              "pct_edges_above_1.25": 8.0
+            }
+          },
+          "Sprint 3 Preserve Volume": {
+            "épaule.L": {
+              "q05_length_ratio": 0.6141401677064477,
+              "median_length_ratio": 0.9802636685631372,
+              "q95_length_ratio": 1.3178379894258363,
+              "pct_edges_below_0.8": 14.912621359223301,
+              "pct_edges_above_1.25": 6.990291262135923
+            },
+            "coude.L": {
+              "q05_length_ratio": 0.6548070145016945,
+              "median_length_ratio": 1.0050638234725464,
+              "q95_length_ratio": 1.5656102724614218,
+              "pct_edges_below_0.8": 11.12,
+              "pct_edges_above_1.25": 12.72
+            }
+          }
+        }
+      },
+      "rest_max_displacement": 1.0448891436015493e-06,
+      "glb_probe_separate_vs_direct_max_delta": 1.2132327419122979e-06
+    },
+    "Trapu": {
+      "stance_detected": "T",
+      "morph_scales": {
+        "width": 1.16,
+        "depth": 1.25,
+        "legs": 0.91,
+        "arms": 1.04
+      },
+      "vertices": 22800,
+      "edges": 45596,
+      "faces": 22798,
+      "def_bones": 35,
+      "weight_stats": {
+        "Bone Heat normalisé": {
+          "max_influences": 7,
+          "vertices_over_4": 4748,
+          "max_sum_error": 4.470348358154297e-08,
+          "mean_squared_weight_jump": 0.0042876367207709916
+        },
+        "Sprint 3 linéaire": {
+          "max_influences": 4,
+          "vertices_over_4": 0,
+          "max_sum_error": 5.21540641784668e-08,
+          "mean_squared_weight_jump": 0.004572576715009911
+        }
+      },
+      "local_edge_count": {
+        "épaule.L": 1833,
+        "coude.L": 883
+      },
+      "poses": {
+        "Repos": {
+          "Bone Heat normalisé": {
+            "épaule.L": {
+              "q05_length_ratio": 0.9999996393170447,
+              "median_length_ratio": 1.0,
+              "q95_length_ratio": 1.0000020480560834,
+              "pct_edges_below_0.8": 0.0,
+              "pct_edges_above_1.25": 0.0
+            },
+            "coude.L": {
+              "q05_length_ratio": 0.9999966198355187,
+              "median_length_ratio": 1.0,
+              "q95_length_ratio": 1.0000042193849095,
+              "pct_edges_below_0.8": 0.0,
+              "pct_edges_above_1.25": 0.0
+            }
+          },
+          "Sprint 3 linéaire": {
+            "épaule.L": {
+              "q05_length_ratio": 0.9999996378363187,
+              "median_length_ratio": 1.0,
+              "q95_length_ratio": 1.0000020450346592,
+              "pct_edges_below_0.8": 0.0,
+              "pct_edges_above_1.25": 0.0
+            },
+            "coude.L": {
+              "q05_length_ratio": 0.9999968569446843,
+              "median_length_ratio": 1.0,
+              "q95_length_ratio": 1.0000042193849095,
+              "pct_edges_below_0.8": 0.0,
+              "pct_edges_above_1.25": 0.0
+            }
+          },
+          "Sprint 3 Preserve Volume": {
+            "épaule.L": {
+              "q05_length_ratio": 0.9999980454204753,
+              "median_length_ratio": 1.0,
+              "q95_length_ratio": 1.0000012950787314,
+              "pct_edges_below_0.8": 0.0,
+              "pct_edges_above_1.25": 0.0
+            },
+            "coude.L": {
+              "q05_length_ratio": 0.9999930914798559,
+              "median_length_ratio": 1.0,
+              "q95_length_ratio": 1.0000063034824325,
+              "pct_edges_below_0.8": 0.0,
+              "pct_edges_above_1.25": 0.0
+            }
+          }
+        },
+        "Élévation": {
+          "Bone Heat normalisé": {
+            "épaule.L": {
+              "q05_length_ratio": 0.5252926203546981,
+              "median_length_ratio": 0.934061713062459,
+              "q95_length_ratio": 1.3706230190511595,
+              "pct_edges_below_0.8": 31.369339879978174,
+              "pct_edges_above_1.25": 8.51063829787234
+            },
+            "coude.L": {
+              "q05_length_ratio": 0.9584576080999283,
+              "median_length_ratio": 0.9997199288538708,
+              "q95_length_ratio": 1.0467022876993284,
+              "pct_edges_below_0.8": 0.0,
+              "pct_edges_above_1.25": 0.0
+            }
+          },
+          "Sprint 3 linéaire": {
+            "épaule.L": {
+              "q05_length_ratio": 0.5224163774032694,
+              "median_length_ratio": 0.9329046055249014,
+              "q95_length_ratio": 1.3627816479914399,
+              "pct_edges_below_0.8": 31.42389525368249,
+              "pct_edges_above_1.25": 8.61974904528096
+            },
+            "coude.L": {
+              "q05_length_ratio": 0.9591590734047599,
+              "median_length_ratio": 0.9997387166554678,
+              "q95_length_ratio": 1.0471163101443672,
+              "pct_edges_below_0.8": 0.0,
+              "pct_edges_above_1.25": 0.0
+            }
+          },
+          "Sprint 3 Preserve Volume": {
+            "épaule.L": {
+              "q05_length_ratio": 0.47071893609780974,
+              "median_length_ratio": 0.9918834534974331,
+              "q95_length_ratio": 1.627486735112313,
+              "pct_edges_below_0.8": 21.003818876159304,
+              "pct_edges_above_1.25": 15.111838516093833
+            },
+            "coude.L": {
+              "q05_length_ratio": 0.959939731341302,
+              "median_length_ratio": 1.0007875036598484,
+              "q95_length_ratio": 1.0478383077274398,
+              "pct_edges_below_0.8": 0.0,
+              "pct_edges_above_1.25": 0.0
+            }
+          }
+        },
+        "Flexion": {
+          "Bone Heat normalisé": {
+            "épaule.L": {
+              "q05_length_ratio": 0.9999996855717209,
+              "median_length_ratio": 1.0,
+              "q95_length_ratio": 1.0000020125106837,
+              "pct_edges_below_0.8": 0.0,
+              "pct_edges_above_1.25": 0.0
+            },
+            "coude.L": {
+              "q05_length_ratio": 0.6060243443372093,
+              "median_length_ratio": 1.012011584345994,
+              "q95_length_ratio": 1.3491543016193255,
+              "pct_edges_below_0.8": 15.968289920724802,
+              "pct_edges_above_1.25": 10.758776896942242
+            }
+          },
+          "Sprint 3 linéaire": {
+            "épaule.L": {
+              "q05_length_ratio": 0.9999996838103353,
+              "median_length_ratio": 1.0,
+              "q95_length_ratio": 1.0000020125106837,
+              "pct_edges_below_0.8": 0.0,
+              "pct_edges_above_1.25": 0.0
+            },
+            "coude.L": {
+              "q05_length_ratio": 0.601946950268252,
+              "median_length_ratio": 1.0111303744235822,
+              "q95_length_ratio": 1.35502732329598,
+              "pct_edges_below_0.8": 16.64779161947905,
+              "pct_edges_above_1.25": 10.87202718006795
+            }
+          },
+          "Sprint 3 Preserve Volume": {
+            "épaule.L": {
+              "q05_length_ratio": 0.9999980311729454,
+              "median_length_ratio": 1.0,
+              "q95_length_ratio": 1.0000012897887665,
+              "pct_edges_below_0.8": 0.0,
+              "pct_edges_above_1.25": 0.0
+            },
+            "coude.L": {
+              "q05_length_ratio": 0.5848904598693028,
+              "median_length_ratio": 1.0210458252086636,
+              "q95_length_ratio": 1.8284460394104731,
+              "pct_edges_below_0.8": 15.741789354473386,
+              "pct_edges_above_1.25": 22.989807474518685
+            }
+          }
+        },
+        "Torsion": {
+          "Bone Heat normalisé": {
+            "épaule.L": {
+              "q05_length_ratio": 0.9731687500703005,
+              "median_length_ratio": 1.0,
+              "q95_length_ratio": 1.0295065859755996,
+              "pct_edges_below_0.8": 0.0,
+              "pct_edges_above_1.25": 0.0
+            },
+            "coude.L": {
+              "q05_length_ratio": 0.6468817639813007,
+              "median_length_ratio": 0.9930431595898109,
+              "q95_length_ratio": 1.3635695142936561,
+              "pct_edges_below_0.8": 12.457531143827861,
+              "pct_edges_above_1.25": 9.966024915062288
+            }
+          },
+          "Sprint 3 linéaire": {
+            "épaule.L": {
+              "q05_length_ratio": 0.9733109983571927,
+              "median_length_ratio": 1.0,
+              "q95_length_ratio": 1.0277790399483022,
+              "pct_edges_below_0.8": 0.0,
+              "pct_edges_above_1.25": 0.0
+            },
+            "coude.L": {
+              "q05_length_ratio": 0.6447277191035844,
+              "median_length_ratio": 0.9918780864746356,
+              "q95_length_ratio": 1.3660742250889475,
+              "pct_edges_below_0.8": 12.344280860702153,
+              "pct_edges_above_1.25": 9.513023782559456
+            }
+          },
+          "Sprint 3 Preserve Volume": {
+            "épaule.L": {
+              "q05_length_ratio": 0.9736744898462949,
+              "median_length_ratio": 1.0,
+              "q95_length_ratio": 1.0316046360725066,
+              "pct_edges_below_0.8": 0.0,
+              "pct_edges_above_1.25": 0.0
+            },
+            "coude.L": {
+              "q05_length_ratio": 0.6406768872554918,
+              "median_length_ratio": 1.0223645265370522,
+              "q95_length_ratio": 1.577157861389135,
+              "pct_edges_below_0.8": 11.211778029445075,
+              "pct_edges_above_1.25": 16.761041902604756
+            }
+          }
+        },
+        "Combiné": {
+          "Bone Heat normalisé": {
+            "épaule.L": {
+              "q05_length_ratio": 0.5651429538411058,
+              "median_length_ratio": 0.9564323908023427,
+              "q95_length_ratio": 1.2815963791470415,
+              "pct_edges_below_0.8": 17.18494271685761,
+              "pct_edges_above_1.25": 5.946535733769776
+            },
+            "coude.L": {
+              "q05_length_ratio": 0.6422795860507456,
+              "median_length_ratio": 0.9907684244843594,
+              "q95_length_ratio": 1.3631352912366637,
+              "pct_edges_below_0.8": 16.421291053227634,
+              "pct_edges_above_1.25": 10.419026047565119
+            }
+          },
+          "Sprint 3 linéaire": {
+            "épaule.L": {
+              "q05_length_ratio": 0.5645514689159177,
+              "median_length_ratio": 0.9560555155522676,
+              "q95_length_ratio": 1.2796220779504586,
+              "pct_edges_below_0.8": 17.40316421167485,
+              "pct_edges_above_1.25": 6.110201854882706
+            },
+            "coude.L": {
+              "q05_length_ratio": 0.639717335133172,
+              "median_length_ratio": 0.9878368666066759,
+              "q95_length_ratio": 1.3610232181545916,
+              "pct_edges_below_0.8": 16.761041902604756,
+              "pct_edges_above_1.25": 10.419026047565119
+            }
+          },
+          "Sprint 3 Preserve Volume": {
+            "épaule.L": {
+              "q05_length_ratio": 0.6071557130665819,
+              "median_length_ratio": 0.991719654510262,
+              "q95_length_ratio": 1.3553989395516326,
+              "pct_edges_below_0.8": 13.966175668303327,
+              "pct_edges_above_1.25": 8.346972176759412
+            },
+            "coude.L": {
+              "q05_length_ratio": 0.5965035284443603,
+              "median_length_ratio": 1.0218719434072223,
+              "q95_length_ratio": 1.7295894829360887,
+              "pct_edges_below_0.8": 16.64779161947905,
+              "pct_edges_above_1.25": 20.724801812004532
+            }
+          }
+        }
+      },
+      "rest_max_displacement": 2.007734483891986e-06,
+      "glb_probe_separate_vs_direct_max_delta": 1.8657420163060367e-06
+    }
+  }
+}

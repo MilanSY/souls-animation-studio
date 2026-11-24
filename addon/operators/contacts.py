@@ -29,13 +29,22 @@ class ContactOperator(StudioOperator):
 class SAS_OT_lock_contact(ContactOperator, bpy.types.Operator):
     bl_idname = "sas.lock_contact"
     bl_label = "Lock Contact"
-    bl_description = "Pin a hand or foot to its current world position or to a target object"
+    bl_description = "Add a disjoint hand or foot contact at the range start or current pose"
     service = (contacts, "lock_contact")
+
+    blend_in: bpy.props.FloatProperty(name="Blend In (Frames)", min=0, options={"SKIP_SAVE"})
+    blend_out: bpy.props.FloatProperty(name="Blend Out (Frames)", min=0, options={"SKIP_SAVE"})
+
+    def invoke(self, context, event):
+        if context.scene.sas_settings.contact_use_range:
+            return context.window_manager.invoke_props_dialog(self)
+        return self.execute(context)
 
     def run(self, context, settings):
         contacts.lock_contact(
             context, resolve_rig(context), settings.contact_limb,
             target=settings.contact_target, orientation=settings.contact_orientation,
+            blend_in=self.blend_in, blend_out=self.blend_out,
             **_interval(settings),
         )
         return {"FINISHED"}
@@ -47,8 +56,13 @@ class SAS_OT_unlock_contact(ContactOperator, bpy.types.Operator):
     bl_description = "Remove the contact for the chosen limb"
     service = (contacts, "unlock_contact")
 
+    contact_id: bpy.props.StringProperty(name="Contact ID", options={"HIDDEN", "SKIP_SAVE"})
+
     def run(self, context, settings):
-        contacts.unlock_contact(context, resolve_rig(context), settings.contact_limb)
+        if not contacts.unlock_contact(context, resolve_rig(context), settings.contact_limb,
+                                       contact_id=self.contact_id or None):
+            self.report({"INFO"}, "No matching contact to remove.")
+            return {"CANCELLED"}
         return {"FINISHED"}
 
 
@@ -59,9 +73,29 @@ class SAS_OT_set_contact_enabled(ContactOperator, bpy.types.Operator):
     service = (contacts, "set_contact_enabled")
 
     enabled: bpy.props.BoolProperty(name="Enabled", default=True, options={"SKIP_SAVE"})
+    contact_id: bpy.props.StringProperty(name="Contact ID", options={"HIDDEN", "SKIP_SAVE"})
 
     def run(self, context, settings):
-        contacts.set_contact_enabled(context, resolve_rig(context), settings.contact_limb, self.enabled)
+        contacts.set_contact_enabled(context, resolve_rig(context), settings.contact_limb, self.enabled,
+                                     contact_id=self.contact_id or None)
+        return {"FINISHED"}
+
+
+class SAS_OT_key_contact_activation(ContactOperator, bpy.types.Operator):
+    bl_idname = "sas.key_contact_activation"
+    bl_label = "Key Contact Activation"
+    bl_description = "Key the contact's activation at the current frame without keying the rig"
+    service = (contacts, "key_contact_activation")
+
+    activation: bpy.props.FloatProperty(name="Activation", min=0, max=1, default=1, options={"SKIP_SAVE"})
+    contact_id: bpy.props.StringProperty(name="Contact ID", options={"HIDDEN", "SKIP_SAVE"})
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self)
+
+    def run(self, context, settings):
+        contacts.key_contact_activation(context, resolve_rig(context), settings.contact_limb, self.activation,
+                                        contact_id=self.contact_id or None)
         return {"FINISHED"}
 
 
@@ -108,6 +142,8 @@ class SAS_OT_contact_residuals(ContactOperator, bpy.types.Operator):
             self.report({"INFO"}, "No contacts on this rig.")
         for residual in residuals:
             values = []
+            if residual.active:
+                values.append(f"{residual.influence:.1%} influence")
             if residual.distance is not None:
                 values.append(f"{residual.distance:.4f} BU")
             if residual.orientation is not None:
@@ -116,12 +152,12 @@ class SAS_OT_contact_residuals(ContactOperator, bpy.types.Operator):
                 values.append(residual.message)
             self.report(
                 {"INFO"} if residual.valid else {"WARNING"},
-                f"{residual.limb}: {', '.join(values) or 'inactive at this frame'}",
+                f"{residual.limb} [{residual.contact_id}]: {', '.join(values) or 'inactive at this frame'}",
             )
         return {"FINISHED"}
 
 
 CLASSES = (
-    SAS_OT_lock_contact, SAS_OT_unlock_contact, SAS_OT_set_contact_enabled,
+    SAS_OT_lock_contact, SAS_OT_unlock_contact, SAS_OT_set_contact_enabled, SAS_OT_key_contact_activation,
     SAS_OT_setup_weapon, SAS_OT_clear_weapon, SAS_OT_contact_residuals,
 )

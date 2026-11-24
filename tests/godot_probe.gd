@@ -15,12 +15,12 @@ func fail(message: String) -> void:
 
 func _run() -> void:
 	var args := OS.get_cmdline_user_args()
-	if args.size() < 1 or args.size() > 2:
-		fail("expected a GLB path and optional JSON reference")
+	if args.size() < 1 or args.size() > 3:
+		fail("expected a GLB path, optional JSON reference, and optional accessory GLB")
 		return
 
 	var reference: Dictionary = {}
-	if args.size() == 2:
+	if args.size() >= 2:
 		var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(args[1]))
 		if not parsed is Dictionary:
 			fail("the JSON reference is missing or malformed: " + args[1])
@@ -29,6 +29,12 @@ func _run() -> void:
 		if not valid_reference(reference):
 			fail("the JSON reference does not contain valid bounds, duration and joint information")
 			return
+	if reference.has("accessory") != (args.size() == 3):
+		fail("accessory comparison requires both accessory reference data and a separate GLB")
+		return
+	if args.size() == 3 and not valid_accessory_reference(reference["accessory"]):
+		fail("invalid accessory reference data")
+		return
 	var bone_name: String = reference.get("bone", "DEF-upper_arm.L")
 	var document := GLTFDocument.new()
 	var state := GLTFState.new()
@@ -36,7 +42,7 @@ func _run() -> void:
 	if status != OK:
 		fail("GLTFDocument.append_from_file returned " + error_string(status))
 		return
-	var imported := document.generate_scene(state)
+	var imported := document.generate_scene(state, float(reference["accessory"]["fps"]) if args.size() == 3 else 30.0)
 	if imported == null:
 		fail("GLTFDocument.generate_scene did not generate a scene")
 		return
@@ -45,10 +51,20 @@ func _run() -> void:
 	var meshes := imported.find_children("*", "MeshInstance3D", true, false)
 	var skeletons := imported.find_children("*", "Skeleton3D", true, false)
 	var players := imported.find_children("*", "AnimationPlayer", true, false)
-	if meshes.size() != 1 or skeletons.size() != 1 or players.is_empty():
-		fail("expected one character mesh, one skeleton and at least one AnimationPlayer")
+	var has_accessory := args.size() == 3
+	if meshes.size() != (2 if has_accessory else 1) or skeletons.size() != 1 or players.is_empty():
+		fail("unexpected mesh, skeleton or AnimationPlayer count")
 		return
-	var mesh_instance: MeshInstance3D = meshes[0]
+	var mesh_instance: MeshInstance3D
+	var accessory: MeshInstance3D
+	for node: MeshInstance3D in meshes:
+		if node.skin != null:
+			mesh_instance = node
+		else:
+			accessory = node
+	if mesh_instance == null or (has_accessory and accessory == null):
+		fail("expected one skinned character and, in combined mode, one unskinned accessory")
+		return
 	var skeleton: Skeleton3D = skeletons[0]
 	var skin := mesh_instance.skin
 	var target_index := skeleton.find_bone(bone_name)
@@ -109,6 +125,11 @@ func _run() -> void:
 					if absf(pose_start.dot(pose_end)) >= 0.999:
 						fail("the varying rotation track did not move the imported deform bone")
 						return
+					if has_accessory:
+						var issue := check_accessory(accessory, skeleton, player, reference["accessory"], args[2])
+						if not issue.is_empty():
+							fail(issue)
+							return
 					print("Godot %s: %d bones, %d binds, AABB %s; %s (%ss) moves %s" % [
 						Engine.get_version_info().string, skeleton.get_bone_count(),
 						skin.get_bind_count(), box, clip, animation.length, bone_name,
@@ -118,17 +139,130 @@ func _run() -> void:
 	fail("no imported animation contains a nonconstant rotation channel for " + bone_name)
 
 
+func vec(value: Array) -> Vector3:
+	return Vector3(value[0], value[1], value[2])
+
+
+func transform_from(columns: Array) -> Transform3D:
+	return Transform3D(Basis(vec(columns[0]), vec(columns[1]), vec(columns[2])), vec(columns[3]))
+
+
+func basis_error(actual: Basis, expected: Basis) -> float:
+	return maxf(actual.x.distance_to(expected.x),
+		maxf(actual.y.distance_to(expected.y), actual.z.distance_to(expected.z)))
+
+
+func valid_accessory_reference(value: Variant) -> bool:
+	if not value is Dictionary or not value.get("parent") is String \
+			or not value.get("fps") is float or not is_finite(value["fps"]) or value["fps"] <= 0.0:
+		return false
+	if not valid_vector(value.get("aabb_min")) or not valid_vector(value.get("aabb_max")):
+		return false
+	var samples: Variant = value.get("samples")
+	if not samples is Array or samples.size() < 2:
+		return false
+	var last := -1.0
+	for sample in samples:
+		if not sample is Dictionary or not sample.get("time") is float \
+				or not is_finite(sample["time"]) or sample["time"] < 0.0 or sample["time"] <= last:
+			return false
+		last = sample["time"]
+		for key in ["hand", "world", "relative"]:
+			var columns: Variant = sample.get(key)
+			if not columns is Array or columns.size() != 4:
+				return false
+			for column in columns:
+				if not valid_vector(column):
+					return false
+	return true
+
+
+func valid_vector(value: Variant) -> bool:
+	if not value is Array or value.size() != 3:
+		return false
+	for component in value:
+		if not component is float or not is_finite(component):
+			return false
+	return true
+
+
+func check_accessory(accessory: MeshInstance3D, skeleton: Skeleton3D, player: AnimationPlayer,
+		reference: Dictionary, asset_path: String) -> String:
+	var bone_name: String = reference["parent"]
+	var index := skeleton.find_bone(bone_name)
+	var parent := accessory.get_parent()
+	while parent != null and not parent is BoneAttachment3D:
+		parent = parent.get_parent()
+	if index < 0 or parent == null or parent.bone_name != bone_name or parent.get_parent() != skeleton:
+		return "accessory is not attached to the expected DEF bone: " + bone_name
+
+	var state := GLTFState.new()
+	var document := GLTFDocument.new()
+	if document.append_from_file(asset_path, state) != OK:
+		return "could not import the separate GLB"
+	var asset := document.generate_scene(state) as Node3D
+	if asset == null:
+		return "the separate GLB has no 3D scene"
+	var mesh_nodes := asset.find_children("*", "MeshInstance3D", true, false)
+	if asset is MeshInstance3D:
+		mesh_nodes.push_front(asset)
+	if mesh_nodes.size() != 1 or not asset.find_children("*", "Skeleton3D").is_empty() \
+			or not asset.find_children("*", "AnimationPlayer").is_empty():
+		asset.free()
+		return "separate GLB must contain exactly one rigid mesh, no rig or animation"
+	var replacement: MeshInstance3D = mesh_nodes[0]
+	var original_box := accessory.get_aabb()
+	var box := replacement.get_aabb()
+	if replacement.skin != null or replacement.mesh == null or box.position.distance_to(original_box.position) > 0.0001 \
+			or box.end.distance_to(original_box.end) > 0.0001 \
+			or box.position.distance_to(vec(reference["aabb_min"])) > 0.0001 \
+			or box.end.distance_to(vec(reference["aabb_max"])) > 0.0001:
+		asset.free()
+		return "separate GLB geometry/pivot disagrees with Blender or the combined accessory"
+	# Keep the combined animated pivot, replacing only the mesh at identity.
+	accessory.add_child(asset)
+	accessory.mesh = null
+	var worst_world := Vector2.ZERO
+	var worst_relative := Vector2.ZERO
+	var worst_hand := Vector2.ZERO
+	var samples: Array = reference["samples"]
+	for sample: Dictionary in samples:
+		player.seek(float(sample["time"]), true)
+		skeleton.force_update_all_bone_transforms()
+		# The deferred scene-tree skeleton notification has not run during this synchronous probe.
+		parent.on_skeleton_update()
+		var hand := skeleton.global_transform * skeleton.get_bone_global_pose(index)
+		var world := accessory.global_transform
+		if not hand.is_finite() or not world.is_finite() or absf(hand.basis.determinant()) < 0.000001:
+			return "non-finite animation sample or singular DEF transform"
+		if not replacement.global_transform.is_equal_approx(world):
+			return "separate GLB does not reuse the animated pivot at identity"
+		var relative := hand.affine_inverse() * world
+		var expected_hand := transform_from(sample["hand"])
+		var expected_world := transform_from(sample["world"])
+		var expected_relative := transform_from(sample["relative"])
+		worst_hand = worst_hand.max(Vector2(hand.origin.distance_to(expected_hand.origin),
+			basis_error(hand.basis, expected_hand.basis)))
+		worst_world = worst_world.max(Vector2(world.origin.distance_to(expected_world.origin),
+			basis_error(world.basis, expected_world.basis)))
+		worst_relative = worst_relative.max(Vector2(relative.origin.distance_to(expected_relative.origin),
+			basis_error(relative.basis, expected_relative.basis)))
+	var summary := "%d samples, max (meters, basis): world %s, DEF-relative %s, DEF %s" % [
+		samples.size(), worst_world, worst_relative, worst_hand]
+	if worst_world.x > 0.002 or worst_world.y > 0.008 or worst_hand.x > 0.008 \
+			or worst_hand.y > 0.045 or worst_relative.x > 0.012 or worst_relative.y > 0.045:
+		return "Blender/Godot transform mismatch: " + summary
+	print("Accessory and separate GLB reuse: " + summary)
+	return ""
+
+
 func valid_reference(reference: Dictionary) -> bool:
 	if not reference.get("bone") is String or not reference.get("duration") is float \
 			or not reference.get("joint_count") is float:
 		return false
 	for key in ["aabb_min", "aabb_max"]:
-		var value: Variant = reference.get(key)
-		if not value is Array or value.size() != 3:
+		if not valid_vector(reference.get(key)):
 			return false
-		for component in value:
-			if not component is float or not is_finite(component):
-				return false
 	return true
 
 

@@ -4,8 +4,8 @@
 bash scripts/build_extension.sh
 bash scripts/test_headless.sh
 # Ou pour vérifier un ZIP précis :
-bash scripts/test_headless.sh dist/souls_animation_studio-0.3.0.zip
-bash tests/test_shell_failures.sh dist/souls_animation_studio-0.3.0.zip
+bash scripts/test_headless.sh dist/souls_animation_studio-0.4.0.zip
+bash tests/test_shell_failures.sh dist/souls_animation_studio-0.4.0.zip
 ```
 
 Le test utilise un profil Blender temporaire hors ligne et le vrai ZIP installé,
@@ -38,6 +38,8 @@ en mode `EXEC_DEFAULT` : il ne teste pas les gestes clavier ou souris.
 ## Import expérimental dans Godot
 
 ```sh
+SOULS_TEST_GODOT=1 bash scripts/test_headless.sh
+# Ou uniquement le GLB personnage de référence :
 SOULS_TEST_GLB=/tmp/opencode/sas-reference.glb bash scripts/test_headless.sh
 bash tests/test_godot_import.sh /tmp/opencode/sas-reference.glb
 ```

@@ -61,6 +61,26 @@ with ZipFile(sys.argv[1]) as archive:
     --python "$root/tests/headless_smartpose.py" -- "$scratch"
 "$blender" --background --offline-mode --disable-autoexec "$scratch/smartpose.blend" \
     --python-exit-code 1 --python "$root/tests/headless_smartpose.py" -- "$scratch" --reopen
+"$blender" --background --offline-mode --python-exit-code 1 \
+    --python "$root/tests/headless_rigging_sprint3.py"
+"$blender" --background --offline-mode --python-exit-code 1 \
+    --python "$root/tests/headless_rigging_bridge.py"
+"$blender" --background --offline-mode --python-exit-code 1 \
+    --python "$root/tests/headless_contacts_sprint3.py" -- "$scratch"
+"$blender" --background --offline-mode --python-exit-code 1 \
+    --python "$root/tests/headless_accessories.py" -- "$scratch"
+python3 "$root/tests/test_external_backend.py"
+"$blender" --background --offline-mode --python-exit-code 1 \
+    --python "$root/tests/test_external_backend.py"
+python3 "$root/backends/inbetweening/test_cpu.py"
+"$blender" --background --factory-startup --offline-mode --python-exit-code 1 \
+    --python "$root/backends/inbetweening/test_blender.py"
+
+if [[ "${SOULS_TEST_GODOT:-0}" == 1 ]]; then
+    bash "$root/tests/test_godot_import.sh" "$scratch/reference.glb"
+    bash "$root/tests/test_godot_import.sh" "$scratch/combined.glb" \
+        "$scratch/combined.glb.json" "$scratch/accessory.glb"
+fi
 
 "$blender" --background --offline-mode --command extension remove "$ext_id"
 # A successful command alone doesn't prove that the actual installed add-on is gone.

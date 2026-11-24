@@ -1,15 +1,22 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Landmarks for a symmetric humanoid A-pose, in mesh-local coordinates."""
+"""Sectional landmarks for symmetric humanoids, in mesh-local coordinates."""
 
-from math import isfinite
+from math import atan2, degrees, isfinite
 
 
-def estimate(mesh):
+def estimate(mesh, *, pose="AUTO"):
+    """Return Basic Human endpoints (legacy API), with optional pose constraint."""
+    return estimate_with_pose(mesh, pose=pose)[0]
+
+
+def estimate_with_pose(mesh, *, pose="AUTO"):
     """Return Basic Human bone endpoints, or reject an unsupported silhouette.
 
     This is a sectional fit, not anatomy detection. Proportions seed the
     section positions; cross-sectional extrema supply depth and limb centers.
     """
+    if pose not in {"AUTO", "A", "T"}:
+        raise ValueError("Pose attendue : AUTO, A ou T.")
     vertices = [tuple(v.co) for v in mesh.vertices]
     if not vertices or not mesh.polygons or not all(
         isfinite(c) for vertex in vertices for c in vertex
@@ -19,8 +26,8 @@ def estimate(mesh):
     low = tuple(map(min, zip(*vertices)))
     high = tuple(map(max, zip(*vertices)))
     width, depth, height = (b - a for a, b in zip(low, high))
-    if height <= 1e-6 or not (.55 <= width / height <= 1.12 and .04 <= depth / height <= .42):
-        raise ValueError("Estimation : proportions hors limites (humanoïde symétrique, A-pose, Z haut, -Y avant).")
+    if height <= 1e-6 or not (.53 <= width / height <= 1.35 and .04 <= depth / height <= .48):
+        raise ValueError("Estimation : proportions hors limites (humanoïde symétrique, A/T, Z haut, -Y avant).")
     center = (low[0] + high[0]) / 2
     floor = low[2]
     reach = width / 2
@@ -55,7 +62,9 @@ def estimate(mesh):
         ]
         l, r = midpoint(*left), midpoint(*right)
         mirror = (2 * center - r[0], r[1], r[2])
-        if max(abs(a - b) for a, b in zip(l, mirror)) > .045 * height:
+        if (max(abs(a - b) for a, b in zip(l, mirror)) > .045 * height
+                or max(abs((a - b) - (c - d)) for a, b, c, d in
+                       zip(left[1], left[0], right[1], right[0])) > .055 * height):
             raise ValueError(f"Estimation : sections trop asymétriques ({label}).")
         return midpoint(l, mirror), left, right
 
@@ -66,10 +75,10 @@ def estimate(mesh):
             lambda p: center - .16 * height < p[0] < center - .012 * height,
         ), label)
 
-    def arm(fraction, label, min_level=.49):
-        return paired(0, (center + fraction * reach, center - fraction * reach), (
+    def arm(offset, label, min_level=.49):
+        return paired(0, (center + offset, center - offset), (
             lambda p: p[2] >= floor + min_level * height,
-        ) * 2, label)[0]
+        ) * 2, label)
 
     def with_depth(p, y):
         return p[0], y, p[2]
@@ -91,14 +100,30 @@ def estimate(mesh):
     toe = ankle[0], front + .29 * (back - front), floor + .023 * height
     toe_end = ankle[0], front + .06 * (back - front), toe[2]
 
-    shoulder = arm(.26, "épaule", .72)
-    elbow = arm(.57, "coude")
-    wrist = arm(.84, "poignet")
-    hand = arm(.95, "main")
-    if not (floor + .73 * height <= shoulder[2] <= floor + .89 * height
-            and shoulder[2] > elbow[2] > wrist[2] > hand[2]):
-        raise ValueError("Estimation : bras en A-pose descendante attendus (pas de T-pose).")
-    elbow_line = shoulder[1] + (wrist[1] - shoulder[1]) * (.57 - .26) / (.84 - .26)
+    # Shoulder seed tracks the upper torso, not the span (which changes in T).
+    upper_z = floor + .70 * height
+    torso_lo, torso_hi = section(2, upper_z, lambda p: abs(p[0] - center) < .16 * height, "thorax")
+    shoulder_x = min(.39 * reach, max(.23 * reach, .54 * (torso_hi[0] - torso_lo[0])))
+    shoulder = arm(shoulder_x, "épaule", .72)[0]
+    wrist_sections = []
+    for fraction in (.79, .815, .84, .865, .89):
+        p, left, right = arm(fraction * reach, "poignet")
+        # Y thickness is insensitive to the slope of the arm in the frontal plane.
+        thickness = sum(hi[1] - lo[1] for lo, hi in (left, right)) / 2
+        wrist_sections.append((thickness + abs(fraction - .84) * .14 * height, p))
+    wrist = min(wrist_sections)[1]
+    elbow = arm((shoulder_x + wrist[0] - center) / 2, "coude")[0]
+    hand = arm(.96 * reach, "main")[0]
+    angle = degrees(atan2(shoulder[2] - wrist[2], wrist[0] - shoulder[0]))
+    detected = "T" if angle <= 12 else "A"
+    if not (floor + .72 * height <= shoulder[2] <= floor + .90 * height
+            and -10 <= angle <= 55
+            and elbow[2] <= shoulder[2] + .028 * height
+            and hand[2] <= wrist[2] + .028 * height):
+        raise ValueError("Estimation : bras horizontaux ou descendants attendus (T/A-pose).")
+    if pose != "AUTO" and pose != detected:
+        raise ValueError(f"Estimation : pose {detected} détectée, pose {pose} demandée ({angle:.0f}°).")
+    elbow_line = (shoulder[1] + wrist[1]) / 2
     if abs(elbow[1] - elbow_line) < .008 * height:
         elbow = with_depth(elbow, elbow_line + .008 * height)
 
@@ -139,4 +164,4 @@ def estimate(mesh):
     if any(sum((a - b) ** 2 for a, b in zip(head, tail)) < (.002 * height) ** 2
            for head, tail in result.values()):
         raise ValueError("Estimation : un repère produit un os trop court ; ajustez le métarig manuellement.")
-    return result
+    return result, detected

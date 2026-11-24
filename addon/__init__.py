@@ -4,6 +4,7 @@
 import bpy
 
 from .operators import CLASSES as OPERATOR_CLASSES
+from .operators.ai_rigging import cancel_active_job
 from .operators.settings import SAS_PG_settings
 from .preferences import SOULS_AP_preferences
 from .ui.panel import CLASSES as UI_CLASSES
@@ -26,6 +27,7 @@ def register():
 
 
 def unregister():
+    cancel_active_job()
     del bpy.types.Scene.sas_settings
     for cls in reversed(CLASSES):
         bpy.utils.unregister_class(cls)

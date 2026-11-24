@@ -18,16 +18,18 @@ PANEL = "SOULS_PT_studio"
 ARCHIVE = Path(sys.argv[sys.argv.index("--") + 1])
 PANELS = {
     "SOULS_PT_studio": ("Smart Pose Editor", set()),
-    "SOULS_PT_contacts": ("Contacts", {"sas.lock_contact", "sas.unlock_contact"}),
+    "SOULS_PT_contacts": ("Contacts", {"sas.lock_contact"}),
     "SOULS_PT_weapon": ("Weapon Setup", {"sas.setup_weapon", "sas.clear_weapon"}),
     "SOULS_PT_poses": ("Pose Library", set()),
     "SOULS_PT_cpu": ("CPU Inbetweening", {"sas.generate_inbetweens", "sas.generate_contact_inbetweens"}),
     "SOULS_PT_ai": ("AI Inbetweening — Unavailable", set()),
+    "SOULS_PT_ai_rigging": ("AI Rigging — Experimental", {"sas.experimental_unirig", "sas.prepare_smartpose_bridge"}),
     "SOULS_PT_export": ("Export", {"sas.export_glb"}),
     "SOULS_PT_diagnostics": ("Diagnostics", {"sas.contact_residuals"}),
     "SOULS_PT_quick_rig": ("Quick Rigging", {
         "sas.quick_rig", "sas.create_meta_rig", "sas.fit_skeleton", "sas.edit_metarig",
         "sas.generate_control_rig", "sas.automatic_skinning", "sas.validate_rig", "sas.reset_pose",
+        "sas.preview_metarig", "sas.restore_metarig_fit", "sas.compare_skinning_volume",
     }),
 }
 MENUS = ("SOULS_MT_poses", "SOULS_MT_blend_poses")
@@ -65,6 +67,9 @@ class LayoutRecorder:
         properties = SimpleNamespace()
         self.operator_calls.append((operator, properties))
         return properties
+
+    def operator_menu_enum(self, operator, _property, **kwargs):
+        return self.operator(operator, **kwargs)
 
     def prop(self, data, property_name, **kwargs):
         self.properties.append(property_name)
@@ -106,7 +111,7 @@ class ExtensionSmokeTests(unittest.TestCase):
             manifest = tomllib.loads(archive.read("blender_manifest.toml").decode())
             self.assertEqual(manifest["id"], MODULE.rsplit(".", 1)[-1])
             version = manifest["version"]
-            self.assertEqual(version, "0.3.0")
+            self.assertEqual(version, "0.4.0")
             self.assertLessEqual(tuple(map(int, manifest["blender_version_min"].split("."))),
                                  bpy.app.version)
             print(f"Extension: {version}; Blender: {bpy.app.version_string}; "
@@ -176,8 +181,9 @@ class ExtensionSmokeTests(unittest.TestCase):
         self.assertIn(f"Python: {'.'.join(map(str, sys.version_info[:3]))}", diagnostics)
         self.assertIn("Mode: Headless", diagnostics)
         self.assertIn("Viewport GPU: Not queried in headless mode", diagnostics)
-        self.assertIn("AI backends: None integrated", diagnostics)
-        self.assertIn("No AI backend is integrated.", draws["SOULS_PT_ai"])
+        self.assertIn("AI backends: UniRig experimental; no AI motion backend", diagnostics)
+        self.assertIn("No AI motion backend is integrated.", draws["SOULS_PT_ai"])
+        self.assertFalse(bpy.ops.sas.experimental_unirig.poll())
         self.assertIn("Ghost preview: unavailable.", diagnostics)
         # The prior full-pose reset remains reachable from Quick Rigging.
         bpy.ops.sas.reset_pose.get_rna_type()

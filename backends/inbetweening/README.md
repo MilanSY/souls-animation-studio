@@ -42,7 +42,7 @@ contrôleurs bruts).
 
 `addon/animation/cpu.py` définit `Backend.generate(Request) -> tuple[Pose, ...]` sans import Blender. Les ancres contiennent des valeurs scalaires et des rotations WXYZ, ordonnées par l’adaptateur Blender. Le moteur retourne seulement des propositions aux images entières non verrouillées ; l’adaptateur garde la maîtrise des ancres, de la conversion des canaux et de l’écriture. Ce contrat Python n’est pas encore un format d’échange externe.
 
-Pour un futur modèle, prévoir un processus CLI local hors Blender, avec l’environnement et les versions épinglées propres à ce modèle. Utiliser une demande/réponse versionnée, des fichiers non exécutables et un dossier de travail isolé. Absence de réseau et de chemin vers le projet Godot pendant le traitement. Vérifier séparément licence du code, conditions des poids et droits sur les données avant utilisation ou redistribution. Les poses verrouillées et contacts annotés devront être vérifiés sur le rig en aval ; un conflit non résolu doit bloquer la validation plutôt qu’être présenté comme une garantie du modèle. Voir [l’architecture](../../docs/architecture.md).
+Le Sprint 3 spécifie séparément le [contrat d’échange externe v1](contract-v1.md). C’est une proposition pour un futur processus local, pas un adaptateur CondMDI/MDM ni un changement des appels CPU. Voir aussi [l’architecture](../../docs/architecture.md).
 
 ## Tests ciblés
 

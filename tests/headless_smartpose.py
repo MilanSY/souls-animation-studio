@@ -114,9 +114,8 @@ class InstalledSmartPoseTests(unittest.TestCase):
         self.assertEqual({state.limb for state in contacts.contact_states(self.context, rig)},
                          {"FOOT_L", "FOOT_R"})
         labels = [label for node in self.draw("SOULS_PT_contacts") for label in node.labels]
-        self.assertTrue(any(label.startswith("Left Foot:") and label != "Left Foot: Free"
-                            for label in labels), labels)
-        self.assertIn("Left Hand: Free", labels)
+        self.assertIn("Left Foot · All frames · 100% influence", labels)
+        self.assertFalse(any(label.startswith("Left Hand ·") for label in labels), labels)
         root = rig.pose.bones["root"]
         root.location = (0.08, 0.03, -0.03)
         for side in ("L", "R"):

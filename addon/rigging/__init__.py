@@ -1,23 +1,31 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Sprint 1: local Rigify authoring and DEF-only bone-heat binding."""
+"""Rigify authoring, DEF-only skinning and placement previews."""
 
 from collections import defaultdict
-from math import isfinite
+from contextlib import contextmanager
+from math import isfinite, sqrt
 
 import addon_utils
+import bmesh
 import bpy
 from mathutils import Matrix, Vector
 
-from .fit import estimate
+from . import landmarks
+from .fit import estimate, estimate_with_pose
+from .weights import smooth_weights
 
 
 __all__ = (
     "create_meta_rig", "fit_skeleton", "generate_control_rig",
     "automatic_skinning", "validate_rig", "reset_pose", "quick_rig",
+    "begin_landmark_edit", "finish_landmark_edit", "mirror_landmarks",
+    "restore_fit", "preview_metarig", "deformation_skeleton", "compare_skinning_volume",
 )
 
 _META = "metarig"
 _RIG = "control_rig"
+_DEF_RIG = "deformation_rig"
+_DRIVER = "sas_control_rig"
 _MODIFIER = "SAS • Rigify DEF"
 _SIDES = (".L", ".R")
 _FK = ("upper_arm_fk", "forearm_fk", "hand_fk", "thigh_fk", "shin_fk", "foot_fk")
@@ -142,6 +150,7 @@ def create_meta_rig(context, mesh):
         meta = bpy.data.objects.new(f"{mesh.name}_metarig", data)
         context.scene.collection.objects.link(meta)
         meta["sas_role"] = _META
+        meta[landmarks.PLANE] = (lo.x + hi.x) / 2
         meta.show_in_front = True
         _select(context, meta)
         create(meta)
@@ -159,41 +168,119 @@ def create_meta_rig(context, mesh):
         raise RuntimeError(f"Création du métarig Rigify : {exc}") from exc
 
 
-def fit_skeleton(context, mesh, meta):
-    """Fit the existing editable template; Z-up, -Y front, symmetric local A-pose."""
+def fit_skeleton(context, mesh, meta, *, pose="AUTO"):
+    """Fit the existing editable template; Z-up, -Y front, symmetric local A/T pose."""
     _require_object(mesh, "MESH")
-    _require_object(meta, "ARMATURE", _META)
-    _require_context(context, mesh, meta)
-    if meta.data.users != 1:
-        raise ValueError("Les données du métarig doivent être à utilisateur unique.")
+    _editable_template(context, meta)
+    _require_context(context, mesh)
     context.view_layer.update()
     if not _same_matrix(mesh.matrix_world, meta.matrix_world):
         raise ValueError("Le métarig et le maillage doivent partager le même repère pour l’estimation.")
-    goals = estimate(mesh.data)
+    goals, detected = estimate_with_pose(mesh.data, pose=pose)
     missing = set(goals) - set(meta.data.bones.keys())
     if missing:
         raise ValueError("Métarig Basic Human modifié ; os manquants : " + ", ".join(sorted(missing)))
     state = _snapshot(context)
-    old = {}
+    old = None
     try:
         _select(context, meta)
         if "FINISHED" not in bpy.ops.object.mode_set(mode="EDIT"):
             raise RuntimeError("Impossible d’éditer le métarig.")
         bones = meta.data.edit_bones
-        for name in goals:
-            b = bones[name]
-            old[name] = (b.head.copy(), b.tail.copy())
-        for name, endpoints in goals.items():
-            bones[name].head, bones[name].tail = endpoints
+        old = landmarks.capture(bones)
+        landmarks.apply(bones, {name: (*ends, None) for name, ends in goals.items()})
+        landmarks.validate(bones)
         _object_mode(context)
+        meta[landmarks.FIT_BACKUP] = {
+            "bones": old, "plane": meta.get(landmarks.PLANE, 0.0),
+            "pose": meta.get(landmarks.POSE, ""),
+        }
+        meta[landmarks.PLANE] = goals["spine"][0][0]
+        meta[landmarks.POSE] = detected
         return meta
     except Exception as exc:
-        if context.mode == "EDIT_ARMATURE":
-            for name, endpoints in old.items():
-                bones[name].head, bones[name].tail = endpoints
+        if context.mode == "EDIT_ARMATURE" and old is not None:
+            landmarks.restore(meta.data.edit_bones, old)
         _object_mode(context)
         _restore(context, state)
         raise RuntimeError(f"Ajustement du métarig : {exc}") from exc
+
+
+def preview_metarig(context, meta):
+    """Show the actual placement as an in-front, unposed armature overlay."""
+    _require_object(meta, "ARMATURE", _META)
+    _require_context(context, meta)
+    meta.show_in_front = True
+    _select(context, meta)
+
+
+def _editable_template(context, meta, modes=("OBJECT",)):
+    _require_object(meta, "ARMATURE", _META)
+    _require_context(context, meta, modes=modes)
+    if meta.data.users != 1 or meta.library or meta.data.library:
+        raise ValueError("Le métarig doit être local, éditable et à utilisateur unique.")
+    if context.mode == "EDIT_ARMATURE" and (
+        context.edit_object != meta or len(context.objects_in_mode) != 1
+    ):
+        raise ValueError("Éditez ce métarig seul.")
+
+
+def _enter_landmark_edit(context, meta):
+    _select(context, meta)
+    if "FINISHED" not in bpy.ops.object.mode_set(mode="EDIT"):
+        raise RuntimeError("Impossible d’éditer le métarig.")
+
+
+def begin_landmark_edit(context, meta):
+    _editable_template(context, meta)
+    state = _snapshot(context)
+    try:
+        _enter_landmark_edit(context, meta)
+        meta[landmarks.EDIT_BACKUP] = landmarks.capture(meta.data.edit_bones)
+    except Exception:
+        _object_mode(context)
+        _restore(context, state)
+        raise
+
+
+def finish_landmark_edit(context, meta, *, cancel=False):
+    _editable_template(context, meta, ("EDIT_ARMATURE",))
+    if cancel:
+        saved = meta.get(landmarks.EDIT_BACKUP)
+        if saved is None:
+            raise ValueError("Aucun point de retour : entrez par Adjust in Edit Mode.")
+        landmarks.restore(meta.data.edit_bones, saved)
+    else:
+        landmarks.validate(meta.data.edit_bones)
+    _object_mode(context)
+    if landmarks.EDIT_BACKUP in meta:
+        del meta[landmarks.EDIT_BACKUP]
+
+
+def mirror_landmarks(context, meta, *, source="L"):
+    _editable_template(context, meta, ("EDIT_ARMATURE",))
+    landmarks.mirror(meta.data.edit_bones, meta.get(landmarks.PLANE, 0.0), source)
+
+
+def restore_fit(context, meta):
+    _editable_template(context, meta)
+    saved = meta.get(landmarks.FIT_BACKUP)
+    if saved is None:
+        raise ValueError("Aucun placement avant estimation à restaurer.")
+    state = _snapshot(context)
+    try:
+        _enter_landmark_edit(context, meta)
+        landmarks.restore(meta.data.edit_bones, saved["bones"])
+        _object_mode(context)
+        meta[landmarks.PLANE] = saved["plane"]
+        if saved["pose"]:
+            meta[landmarks.POSE] = saved["pose"]
+        elif landmarks.POSE in meta:
+            del meta[landmarks.POSE]
+        del meta[landmarks.FIT_BACKUP]
+    finally:
+        _object_mode(context)
+        _restore(context, state)
 
 
 def _rig_issues(rig):
@@ -304,6 +391,8 @@ def _weights(mesh, rig, *, expect_normalized=True):
             problems.add("sans poids DEF")
         elif expect_normalized and abs(total - 1.0) > .0001:
             problems.add("total des poids DEF non normalisé")
+        if expect_normalized and len(assigned) > 4:
+            problems.add("plus de quatre influences DEF")
         for reason in sorted(problems):
             record(reason, v.index)
         row.append(assigned)
@@ -327,10 +416,14 @@ def validate_rig(mesh, rig):
         return ["[maillage] Quittez le mode édition avant de contrôler les poids."]
     issues.extend(_rig_issues(rig))
     modifiers = [m for m in mesh.modifiers if m.type == "ARMATURE"]
-    if len(modifiers) != 1 or modifiers[0].object != rig:
-        issues.append("[modificateur] Un unique modificateur Armature doit cibler le rig de contrôle.")
+    target = modifiers[0].object if len(modifiers) == 1 else None
+    if target != rig:
+        if target is None or target.get("sas_role") != _DEF_RIG or target.get(_DRIVER) != rig:
+            issues.append("[modificateur] Un unique modificateur Armature doit cibler le rig ou son squelette DEF.")
+        elif not _follows_def(target, rig):
+            issues.append("[déformation] Le squelette DEF séparé ne correspond plus au rig de contrôle.")
     for m in modifiers:
-        if m.object == rig and (
+        if (
             not m.show_viewport or not m.show_render or not m.use_vertex_groups
             or m.use_bone_envelopes or m.vertex_group or m.use_multi_modifier
             or m.use_deform_preserve_volume
@@ -338,6 +431,106 @@ def validate_rig(mesh, rig):
             issues.append(f"[modificateur] {m.name} doit être actif, linéaire, en groupes de sommets seuls, sans masque.")
     issues.extend(_weights(mesh, rig)[1])
     return issues
+
+
+def _follows_def(skeleton, rig):
+    bones = skeleton.data.bones
+    identity = Matrix.Identity(4)
+    if (skeleton.data.pose_position != "POSE" or set(bones.keys()) != _def_names(rig)
+            or skeleton.parent != rig or skeleton.parent_type != "OBJECT"
+            or not _same_matrix(skeleton.matrix_parent_inverse, identity)
+            or not _same_matrix(skeleton.matrix_basis, identity)):
+        return False
+    for bone in skeleton.pose.bones:
+        rest = rig.data.bones[bone.name]
+        if (not bone.bone.use_deform or bone.bone.bbone_segments != 1
+                or not _same_matrix(bone.bone.matrix_local, rest.matrix_local)
+                or abs(bone.bone.length - rest.length) > 2e-5
+                or len(bone.constraints) != 1):
+            return False
+        c = bone.constraints[0]
+        if (c.type != "COPY_TRANSFORMS" or c.target != rig or c.subtarget != bone.name
+                or c.mute or c.influence != 1.0 or c.mix_mode != "REPLACE"
+                or c.target_space != "WORLD" or c.owner_space != "WORLD" or c.remove_target_shear):
+            return False
+    return True
+
+
+def _remove_skeleton(skeleton):
+    data = skeleton.data
+    bpy.data.objects.remove(skeleton, do_unlink=True)
+    bpy.data.armatures.remove(data)
+
+
+def _create_deformation_skeleton(context, rig, *, follow_pose):
+    _require_object(rig, "ARMATURE", _RIG)
+    _require_context(context, rig)
+    names = _def_names(rig)
+    if not names:
+        raise ValueError("Aucun DEF déformant à copier.")
+    state = _snapshot(context)
+    data = bpy.data.armatures.new("SAS DEF Preview")
+    skeleton = None
+    try:
+        skeleton = bpy.data.objects.new(data.name, data)
+        context.scene.collection.objects.link(skeleton)
+        _assign_frame(context, skeleton, rig.matrix_world.copy())
+        _select(context, skeleton)
+        if "FINISHED" not in bpy.ops.object.mode_set(mode="EDIT"):
+            raise RuntimeError("Impossible de créer le squelette DEF séparé.")
+        rest = data.edit_bones
+        for b in rig.data.bones:
+            if b.name in names:
+                dst = rest.new(b.name)
+                dst.head, dst.tail = b.head_local, b.tail_local
+                dst.align_roll(b.matrix_local.to_3x3().col[2])
+                dst.head_radius, dst.tail_radius = b.head_radius, b.tail_radius
+                dst.envelope_distance, dst.envelope_weight = b.envelope_distance, b.envelope_weight
+        for name in names:
+            parent = rig.data.bones[name].parent
+            while parent and parent.name not in names:
+                parent = parent.parent
+            if parent:
+                rest[name].parent = rest[parent.name]
+        _object_mode(context)
+        if follow_pose:
+            skeleton.parent = rig
+            skeleton.matrix_parent_inverse = Matrix.Identity(4)
+            skeleton.matrix_basis = Matrix.Identity(4)
+            for bone in skeleton.pose.bones:
+                constraint = bone.constraints.new("COPY_TRANSFORMS")
+                constraint.target, constraint.subtarget = rig, bone.name
+                constraint.target_space = constraint.owner_space = "WORLD"
+        else:
+            data.pose_position = "REST"
+        context.view_layer.update()
+        return skeleton
+    except Exception:
+        _object_mode(context)
+        if skeleton is not None:
+            _remove_skeleton(skeleton)
+        else:
+            bpy.data.armatures.remove(data)
+        raise
+    finally:
+        _restore(context, state)
+
+
+@contextmanager
+def deformation_skeleton(context, rig, *, follow_pose=False):
+    """Yield a temporary DEF-only armature; exporters can bake its evaluated matrices.
+
+    Without follow_pose this is a rest skeleton for Bone Heat. With follow_pose
+    it represents the live separated skin, via world-space Copy Transforms.
+    """
+    state = _snapshot(context)
+    skeleton = _create_deformation_skeleton(context, rig, follow_pose=follow_pose)
+    try:
+        yield skeleton
+    finally:
+        _object_mode(context)
+        _remove_skeleton(skeleton)
+        _restore(context, state)
 
 
 def _heat(context, mesh, rig):
@@ -349,18 +542,14 @@ def _heat(context, mesh, rig):
                               [tuple(e.vertices) for e in mesh.data.edges],
                               [tuple(p.vertices) for p in mesh.data.polygons])
         sample = bpy.data.objects.new("SAS Bone Heat", mesh_data)
-        rest = bpy.data.objects.new("SAS Rest DEF", rig.data.copy())
         context.scene.collection.objects.link(sample)
-        context.scene.collection.objects.link(rest)
-        rest.data.pose_position = "REST"
-        if not _same_matrix(mesh.matrix_world, rig.matrix_world):
-            _assign_frame(context, sample, mesh.matrix_world.copy())
-            _assign_frame(context, rest, rig.matrix_world.copy())
-        _select(context, rest)
-        sample.select_set(True, view_layer=context.view_layer)
-        if "FINISHED" not in bpy.ops.object.parent_set(type="ARMATURE_AUTO"):
-            raise RuntimeError("Bone Heat n’a pas terminé.")
-        rows, issues = _weights(sample, rest, expect_normalized=False)
+        _assign_frame(context, sample, mesh.matrix_world.copy())
+        with deformation_skeleton(context, rig) as rest:
+            _select(context, rest)
+            sample.select_set(True, view_layer=context.view_layer)
+            if "FINISHED" not in bpy.ops.object.parent_set(type="ARMATURE_AUTO"):
+                raise RuntimeError("Bone Heat n’a pas terminé.")
+            rows, issues = _weights(sample, rest, expect_normalized=False)
         if issues:
             raise RuntimeError("Bone Heat n’a pas fourni de poids complets : " + "; ".join(issues))
         return rows
@@ -370,8 +559,11 @@ def _heat(context, mesh, rig):
         _restore(context, state)
 
 
-def automatic_skinning(context, mesh, rig):
-    """Bind only verified DEF weights; do not parent, apply transforms or edit coordinates."""
+def automatic_skinning(context, mesh, rig, *, separate=False):
+    """Bind verified DEF weights; optionally use a physically separate live armature.
+
+    The default target remains Rigify for existing projects and the legacy exporter.
+    """
     _require_object(mesh, "MESH")
     _require_object(rig, "ARMATURE", _RIG)
     _require_context(context, mesh, rig)
@@ -405,22 +597,28 @@ def automatic_skinning(context, mesh, rig):
             raise ValueError(f"Transformation non inversible : {obj.name}.") from exc
     groups = []
     modifier = None
+    skeleton = None
     try:
-        weights = _heat(context, mesh, rig)
+        weights = smooth_weights(_heat(context, mesh, rig), mesh.data.edges)
         assignments = defaultdict(lambda: defaultdict(list))
         for i, row in enumerate(weights):
-            # Keep every positive influence and the ratios Blender computed.
-            # Bone Heat may return sums below 1 even on a valid closed surface.
-            total = sum(row.values())
             for name, weight in row.items():
-                assignments[name][weight / total].append(i)
+                assignments[name][weight].append(i)
         for name in sorted(assignments):
             group = mesh.vertex_groups.new(name=name)
             groups.append(group)
             for weight, indices in assignments[name].items():
                 group.add(indices, weight, "REPLACE")
         modifier = mesh.modifiers.new(name=_MODIFIER, type="ARMATURE")
-        modifier.object = rig
+        if separate:
+            skeleton = _create_deformation_skeleton(context, rig, follow_pose=True)
+            skeleton.name = f"{mesh.name}_DEF"
+            skeleton["sas_role"] = _DEF_RIG
+            skeleton[_DRIVER] = rig
+            skeleton.hide_select = True
+            # Per-view-layer hiding preserves evaluation by the skin modifier.
+            skeleton.hide_set(True, view_layer=context.view_layer)
+        modifier.object = skeleton if skeleton is not None else rig
         modifier.use_vertex_groups = True
         modifier.use_bone_envelopes = False
         # Linear blend skinning matches the interchange baseline.
@@ -433,7 +631,71 @@ def automatic_skinning(context, mesh, rig):
             mesh.modifiers.remove(modifier)
         for group in reversed(groups):
             mesh.vertex_groups.remove(group)
+        if skeleton is not None:
+            _remove_skeleton(skeleton)
         raise RuntimeError(f"Skinning automatique : {exc}") from exc
+
+
+def compare_skinning_volume(context, mesh, rig):
+    """Measure linear and dual-quaternion skinning at the current pose, in mesh space.
+
+    Only the temporary copy uses Preserve Volume. Ratios are global enclosed
+    volume relative to base geometry, not a local collapse or collision metric.
+    """
+    _require_object(mesh, "MESH")
+    _require_object(rig, "ARMATURE", _RIG)
+    _require_context(context, mesh, rig)
+    issues = validate_rig(mesh, rig)
+    if issues:
+        raise ValueError("; ".join(issues))
+    if len(mesh.modifiers) != 1 or mesh.data.shape_keys is not None:
+        raise ValueError("Comparaison : un seul modificateur Armature, sans shape keys.")
+    topology = bmesh.new()
+    sample = None
+    try:
+        topology.from_mesh(mesh.data)
+        if not topology.faces or any(not e.is_manifold or not e.is_contiguous for e in topology.edges):
+            raise ValueError("Comparaison : surface fermée, manifold et orientée attendue.")
+        rest = abs(topology.calc_volume(signed=True))
+        if not isfinite(rest) or rest <= 0:
+            raise ValueError("Comparaison : volume de repos non nul attendu.")
+        topology.verts.index_update()
+        with deformation_skeleton(context, rig, follow_pose=True) as skeleton:
+            sample = mesh.copy()
+            sample.data = mesh.data.copy()
+            sample.name = "SAS Volume Comparison"
+            sample.animation_data_clear()
+            sample.constraints.clear()
+            sample.modifiers.clear()
+            sample.parent = None
+            context.scene.collection.objects.link(sample)
+            sample.hide_set(False)
+            _assign_frame(context, sample, mesh.matrix_world.copy())
+            modifier = sample.modifiers.new("SAS Comparison", "ARMATURE")
+            modifier.object = skeleton
+            volumes, coordinates = [], []
+            for preserve in (False, True):
+                modifier.use_deform_preserve_volume = preserve
+                context.view_layer.update()
+                evaluated = sample.evaluated_get(context.evaluated_depsgraph_get())
+                coords = [v.co.copy() for v in evaluated.data.vertices]
+                for v in topology.verts:
+                    v.co = coords[v.index]
+                volumes.append(abs(topology.calc_volume(signed=True)))
+                coordinates.append(coords)
+        return {
+            "rest_volume": rest,
+            "linear_ratio": volumes[0] / rest,
+            "preserve_ratio": volumes[1] / rest,
+            "rms_displacement": sqrt(sum((a - b).length_squared for a, b in
+                                         zip(*coordinates)) / len(coordinates[0])),
+        }
+    finally:
+        topology.free()
+        if sample is not None:
+            data = sample.data
+            bpy.data.objects.remove(sample, do_unlink=True)
+            bpy.data.meshes.remove(data)
 
 
 def reset_pose(context, rig):
@@ -456,16 +718,16 @@ def reset_pose(context, rig):
     context.view_layer.update()
 
 
-def quick_rig(context, mesh):
+def quick_rig(context, mesh, *, pose="AUTO", separate=False):
     """Create → fit → generate → skin, rolling back new data on failure."""
     _require_object(mesh, "MESH")
     _require_context(context, mesh)
     state, ids = _snapshot(context), _snapshot_ids()
     try:
         meta = create_meta_rig(context, mesh)
-        fit_skeleton(context, mesh, meta)
+        fit_skeleton(context, mesh, meta, pose=pose)
         rig = generate_control_rig(context, meta)
-        automatic_skinning(context, mesh, rig)
+        automatic_skinning(context, mesh, rig, separate=separate)
         return rig
     except Exception:
         _object_mode(context)

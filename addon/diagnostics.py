@@ -21,5 +21,5 @@ def environment_rows():
             ("Graphics API", gpu.platform.backend_type_get() or "Unknown"),
             ("Viewport GPU", gpu.platform.renderer_get() or "Unknown"),
         ))
-    rows.append(("AI backends", "None integrated"))
+    rows.append(("AI backends", "UniRig experimental; no AI motion backend"))
     return tuple(rows)

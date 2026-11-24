@@ -1,0 +1,1 @@
+{"schema":"sas.rig.request","version":1,"space":"normalized-blender-z-up","mesh_id":"f7520b52c116e6117d5b0955f056579fbde6db8d4ecb83dca8412781e57ebbfa","vertices":[[-1,0,0],[1,0,0],[0,0,1],[0,1,0]],"triangles":[[0,1,2],[0,3,1]]}

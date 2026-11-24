@@ -12,15 +12,17 @@ edits after setup are not monitored; remove and re-capture before reparenting.
 from contextlib import contextmanager
 from dataclasses import dataclass
 from math import atan2, floor, hypot, isfinite
-from struct import pack, unpack
 from uuid import uuid4
 
 import bpy
 from mathutils import Matrix, Quaternion
 
+from . import timing
+
 __all__ = (
     "ContactState", "ContactResidual", "contact_states", "contact_residuals",
-    "lock_contact", "unlock_contact", "set_contact_enabled", "clear_contacts",
+    "lock_contact", "unlock_contact", "set_contact_enabled", "key_contact_activation",
+    "clear_contacts",
     "setup_weapon", "clear_weapon",
 )
 
@@ -32,12 +34,15 @@ _LIMBS = {
 _PREFIX = "sas_contact_"
 _WEAPON = _PREFIX + "weapon"
 _TAG = _PREFIX + "owner"
+_RANGE_PREFIX = _PREFIX + "range_"
+_ACTIVATION_PATH = '["activation"]'
 _POSITION = " • Position"
 _ROTATION = " • Rotation"
 _PROP = " • Accessoire"
 _KINDS = {_POSITION: "COPY_LOCATION", _ROTATION: "COPY_ROTATION", _PROP: "COPY_TRANSFORMS"}
 _DISTANCE_TOLERANCE = 0.001  # Blender world units
 _ANGLE_TOLERANCE = 0.01745329252  # radians (one degree)
+_WEIGHT_TOLERANCE = 1e-6  # float32 driver/constraint evaluation
 
 
 @dataclass(frozen=True)
@@ -53,6 +58,11 @@ class ContactState:
     valid: bool
     weapon: bool = False
     enabled: bool = True
+    contact_id: str = ""
+    blend_in: float = 0.0
+    blend_out: float = 0.0
+    activation: float = 1.0
+    muted: bool = False
 
     @property
     def active(self):
@@ -68,6 +78,7 @@ class ContactResidual:
     ik: bool
     valid: bool
     message: str = ""
+    contact_id: str = ""
 
     @property
     def active(self):
@@ -115,18 +126,13 @@ def _bounds(start, end):
             float(end) if end is not None else None)
 
 
-def _blender_frame(value):
-    # The evaluated driver time uses a float32, including at decimal subframes.
-    return unpack("f", pack("f", value))[0]
-
-
 def _validate_time(context, start, end):
     if start is None and end is None:
         return
     scene = context.scene
     if scene.render.frame_map_old != scene.render.frame_map_new:
         raise ValueError("Les plages de contact exigent un remappage temporel 1:1.")
-    if start is None and end is not None and scene.frame_current_final > _blender_frame(end):
+    if start is None and end is not None and scene.frame_current_final > timing.blender_frame(end):
         raise ValueError("La capture courante est après la fin du contact.")
 
 
@@ -339,6 +345,22 @@ def _anchor(context, rig, label, world, start, end, parent=None, parent_world=No
         raise
 
 
+def _drive(constraint, helper):
+    driver = constraint.driver_add("influence").driver
+    driver.type = "SCRIPTED"
+    for variable in list(driver.variables):
+        driver.variables.remove(variable)
+    if "activation" in helper:
+        variable = driver.variables.new()
+        variable.name = "activation"
+        variable.type = "SINGLE_PROP"
+        variable.targets[0].id = helper
+        variable.targets[0].data_path = _ACTIVATION_PATH
+    driver.expression = timing.expression(helper)
+    if not driver.is_simple_expression:
+        raise RuntimeError("Le driver de plage doit être évaluable sans auto-exécution Python.")
+
+
 def _constraint(owner, helper, suffix):
     name = helper["token"] + suffix
     c = owner.constraints.new(_KINDS[suffix])
@@ -346,17 +368,8 @@ def _constraint(owner, helper, suffix):
         c.name = name
         c.target = helper
         c.owner_space = c.target_space = "WORLD"
-        terms = []
-        if "start" in helper:
-            terms.append(f"frame >= {_blender_frame(helper['start'])!r}")
-        if "end" in helper:
-            terms.append(f"frame <= {_blender_frame(helper['end'])!r}")
-        if terms:
-            driver = c.driver_add("influence").driver
-            driver.type = "SCRIPTED"
-            driver.expression = f"1.0 if {' and '.join(terms)} else 0.0"
-            if not driver.is_simple_expression:
-                raise RuntimeError("Le driver de plage doit être évaluable sans auto-exécution Python.")
+        if any(key in helper for key in ("start", "end", "activation")):
+            _drive(c, helper)
         return c
     except Exception:
         c.driver_remove("influence")
@@ -376,7 +389,7 @@ def _remove(owner, helper, *suffixes):
     if owner is not None:
         for suffix in suffixes:
             c = _constraint_for(owner, helper, suffix)
-            if c is not None and c.target == helper:
+            if c is not None and c.type == _KINDS[suffix]:
                 c.driver_remove("influence")
                 owner.constraints.remove(c)
 
@@ -389,7 +402,47 @@ def _helper(rig, key):
     return None
 
 
-def _capture_contact(context, graph, rig, limb, target, orientation, start, end, weapon=False):
+def _contact_index(rig):
+    index = {limb: [] for limb in _LIMBS}
+    for key in rig.keys():
+        if key.startswith(_RANGE_PREFIX):
+            helper = _helper(rig, key)
+            if helper is not None and helper.get("limb") in index:
+                index[helper["limb"]].append((key, helper))
+    for limb, entries in index.items():
+        # Sprint 2 stores one pointer per limb; leave old files readable in place.
+        key = _PREFIX + limb
+        helper = _helper(rig, key)
+        if helper is not None:
+            entries.append((key, helper))
+        entries.sort(key=lambda entry: (entry[1].get("start", float("-inf")), entry[1]["token"]))
+    return index
+
+
+def _select(rig, limb, contact_id):
+    entries = _contact_index(rig)[limb]
+    if contact_id is not None:
+        entries = [entry for entry in entries if entry[1]["token"] == contact_id]
+    if len(entries) > 1:
+        raise ValueError(f"{limb} possède plusieurs contacts : préciser contact_id.")
+    return entries[0] if entries else (None, None)
+
+
+def _check_overlap(rig, limb, start, end):
+    for _, helper in _contact_index(rig)[limb]:
+        if timing.overlaps(start, end, helper.get("start"), helper.get("end")):
+            raise ValueError(f"{limb} : la plage chevauche un contact existant (bornes incluses).")
+
+
+def _activation_property(helper):
+    helper["activation"] = 1.0
+    helper.id_properties_ui("activation").update(
+        min=0.0, max=1.0, default=1.0, description="Contact activation inside the authored range",
+    )
+
+
+def _capture_contact(context, graph, rig, limb, target, orientation, start, end,
+                     weapon=False, blend_in=0.0, blend_out=0.0):
     ctl, switch, deform = _bones(rig.evaluated_get(graph), limb)
     if not _is_ik(switch):
         raise ValueError(f"{limb} doit être en IK (IK_FK = 0) à la capture.")
@@ -404,12 +457,16 @@ def _capture_contact(context, graph, rig, limb, target, orientation, start, end,
     try:
         helper["orientation"] = bool(orientation)
         helper["weapon"] = weapon
+        helper["limb"] = limb
+        helper["blend_in"] = blend_in
+        helper["blend_out"] = blend_out
+        _activation_property(helper)
         helper["def_rotation"] = tuple(ctl_world.to_quaternion().rotation_difference(
             deform_world.to_quaternion()))
         _constraint(ctl, helper, _POSITION)
         if orientation:
             _constraint(ctl, helper, _ROTATION)
-        rig[_PREFIX + limb] = helper
+        rig[_RANGE_PREFIX + helper["token"].rsplit(" ", 1)[-1]] = helper
         return helper, (ctl_world, deform_world)
     except Exception:
         _remove(ctl, helper, _POSITION, _ROTATION)
@@ -421,9 +478,10 @@ def _check_capture(context, rig, limb, helper, captured, orientation):
     context.view_layer.update()
     graph = context.evaluated_depsgraph_get()
     ctl, _, deform = _bones(rig.evaluated_get(graph), limb)
+    expected = timing.window_weight(helper, context.scene.frame_current_final)
     for suffix in (_POSITION, _ROTATION) if orientation else (_POSITION,):
         c = _constraint_for(ctl, helper, suffix)
-        if c is None or not c.is_valid or c.influence != 1.0:
+        if c is None or not c.is_valid or abs(c.influence - expected) > _WEIGHT_TOLERANCE:
             raise ValueError(f"{limb} : la contrainte ne s’évalue pas à la capture.")
     rig_world = _matrix(rig, graph)
     for bone, baseline in zip((ctl, deform), captured, strict=True):
@@ -433,46 +491,68 @@ def _check_capture(context, rig, limb, helper, captured, orientation):
             raise ValueError(f"{limb} : la transformation évaluée saute à la capture ({bone.name}).")
 
 
-def lock_contact(context, rig, limb, target=None, orientation=False, start=None, end=None):
-    """Capture at start (or the current scene time), retaining optional object offset."""
+def lock_contact(context, rig, limb, target=None, orientation=False, start=None, end=None,
+                 *, blend_in=0.0, blend_out=0.0):
+    """Add a disjoint window, capturing at its start or at the current scene time."""
     _rig(context, rig, edit=True)
     limb = _limb(limb)
     start, end = _bounds(start, end)
+    blend_in, blend_out = timing.blends(start, end, blend_in, blend_out)
     _validate_time(context, start, end)
-    if _helper(rig, _PREFIX + limb) is not None:
-        raise ValueError(f"{limb} possède déjà un contact ; le retirer avant de le recapturer.")
+    _check_overlap(rig, limb, start, end)
     prop = _helper(rig, _WEAPON)
     if prop is not None and limb == "HAND_" + prop["primary"]:
         raise ValueError("La main principale doit rester libre pour piloter l’accessoire.")
     if target is not None:
         _external(context, rig, target)
     with _at_capture(context, start) as graph:
-        helper, captured = _capture_contact(context, graph, rig, limb, target, orientation, start, end)
+        helper, captured = _capture_contact(context, graph, rig, limb, target, orientation, start, end,
+                                            blend_in=blend_in, blend_out=blend_out)
         try:
             _check_capture(context, rig, limb, helper, captured, orientation)
         except Exception:
-            unlock_contact(context, rig, limb)
+            unlock_contact(context, rig, limb, contact_id=helper["token"])
             raise
-    return next(state for state in contact_states(context, rig) if state.limb == limb)
+    return _state_for(context, rig, helper)
 
 
-def unlock_contact(context, rig, limb):
+def unlock_contact(context, rig, limb, *, contact_id=None):
     """Remove one owned contact and its drivers without altering the rig action."""
     _rig(context, rig, edit=True)
     limb = _limb(limb)
-    key = _PREFIX + limb
-    helper = _helper(rig, key)
-    if key in rig:
-        del rig[key]
+    key, helper = _select(rig, limb, contact_id)
     if helper is None:
         return False
-    _remove(rig.pose.bones.get(_LIMBS[limb][0]), helper, _POSITION, _ROTATION)
-    bpy.data.objects.remove(helper, do_unlink=True)
+    _delete_contact(rig, limb, key, helper)
     context.view_layer.update()
     return True
 
 
-def set_contact_enabled(context, rig, limb, enabled):
+def _delete_contact(rig, limb, key, helper):
+    del rig[key]
+    _remove(rig.pose.bones.get(_LIMBS[limb][0]), helper, _POSITION, _ROTATION)
+    action = helper.animation_data.action if helper.animation_data else None
+    token = helper["token"]
+    bpy.data.objects.remove(helper, do_unlink=True)
+    if action is not None and action.users == 0 and action.get(_TAG) == token:
+        bpy.data.actions.remove(action)
+
+
+def _state_for(context, rig, helper):
+    return next(state for state in contact_states(context, rig) if state.anchor == helper)
+
+
+def _channels(rig, limb, helper):
+    ctl, _, _ = _bones(rig, limb)
+    suffixes = (_POSITION, _ROTATION) if helper.get("orientation") else (_POSITION,)
+    constraints = [(suffix, _constraint_for(ctl, helper, suffix)) for suffix in suffixes]
+    if any(c is None or c.type != _KINDS[suffix] or c.target != helper
+           for suffix, c in constraints):
+        raise ValueError(f"{limb} : contrainte de contact absente ou modifiée.")
+    return [c for _, c in constraints]
+
+
+def set_contact_enabled(context, rig, limb, enabled, *, contact_id=None):
     """Mute/unmute the owned channels together, without changing the capture.
 
     Resuming during the active range may snap a displaced limb back to its
@@ -483,18 +563,41 @@ def set_contact_enabled(context, rig, limb, enabled):
     limb = _limb(limb)
     if not isinstance(enabled, bool):
         raise ValueError("L’état du contact doit être un booléen.")
-    helper = _helper(rig, _PREFIX + limb)
+    _, helper = _select(rig, limb, contact_id)
     if helper is None:
         raise ValueError(f"{limb} ne possède aucun contact.")
-    ctl, _, _ = _bones(rig, limb)
-    suffixes = (_POSITION, _ROTATION) if helper.get("orientation") else (_POSITION,)
-    constraints = [(suffix, _constraint_for(ctl, helper, suffix)) for suffix in suffixes]
-    if any(c is None or c.type != _KINDS[suffix] or c.target != helper
-           for suffix, c in constraints):
-        raise ValueError(f"{limb} : contrainte de contact absente ou modifiée.")
-    for _, c in constraints:
+    for c in _channels(rig, limb, helper):
         c.mute = not enabled
-    return next(state for state in contact_states(context, rig) if state.limb == limb)
+    return _state_for(context, rig, helper)
+
+
+def key_contact_activation(context, rig, limb, activation, *, contact_id=None):
+    """Key a scalar in [0, 1] on the anchor at the current (sub)frame, not on the rig."""
+    _rig(context, rig, edit=True)
+    limb = _limb(limb)
+    if not isinstance(activation, (int, float)) or not 0 <= activation <= 1:
+        raise ValueError("L’activation du contact doit être comprise entre 0 et 1.")
+    _, helper = _select(rig, limb, contact_id)
+    if helper is None:
+        raise ValueError(f"{limb} ne possède aucun contact.")
+    scene = context.scene
+    if scene.render.frame_map_old != scene.render.frame_map_new:
+        raise ValueError("Les clés d’activation exigent un remappage temporel 1:1.")
+    channels = _channels(rig, limb, helper)
+    if "activation" not in helper:  # Upgrade legacy drivers only when requested.
+        _activation_property(helper)
+        for c in channels:
+            _drive(c, helper)
+    previous = helper["activation"]
+    had_action = helper.animation_data is not None and helper.animation_data.action is not None
+    helper["activation"] = float(activation)
+    if not helper.keyframe_insert(data_path=_ACTIVATION_PATH, frame=scene.frame_current_final):
+        helper["activation"] = previous
+        raise RuntimeError("Impossible d’insérer la clé d’activation.")
+    if not had_action:
+        helper.animation_data.action[_TAG] = helper["token"]
+    scene.frame_set(scene.frame_current, subframe=scene.frame_subframe)
+    return _state_for(context, rig, helper)
 
 
 def _read(context, rig):
@@ -502,32 +605,33 @@ def _read(context, rig):
     context.view_layer.update()
     graph = context.evaluated_depsgraph_get()
     evaluated = rig.evaluated_get(graph)
-    for limb in _LIMBS:
-        helper = _helper(rig, _PREFIX + limb)
-        if helper is None:
-            continue
+    for limb, entries in _contact_index(rig).items():
         try:
             ctl, switch, deform = _bones(evaluated, limb)
         except ValueError:
             ctl = switch = deform = None
-        orientation = bool(helper.get("orientation"))
-        loc = _constraint_for(ctl, helper, _POSITION) if ctl is not None else None
-        rot = _constraint_for(ctl, helper, _ROTATION) if ctl is not None and orientation else None
-        enabled = loc is not None and not loc.mute
-        influence = loc.influence if enabled else 0.0
-        valid = (loc is not None and loc.type == _KINDS[_POSITION] and loc.target is not None
-                 and loc.is_valid and loc.target.original == helper)
-        if orientation:
-            valid = (valid and rot is not None and rot.type == _KINDS[_ROTATION]
-                     and rot.target is not None and rot.target.original == helper
-                     and rot.is_valid and rot.mute == loc.mute and rot.influence == loc.influence)
-        valid = (valid and (not helper.get("external") or helper.parent is not None)
-                 and context.view_layer.objects.get(helper.name) == helper
-                 and (helper.parent is None or context.view_layer.objects.get(helper.parent.name) == helper.parent))
-        yield ContactState(
-            limb, helper, helper.parent, orientation, helper.get("start"), helper.get("end"),
-            influence, switch is not None and _is_ik(switch), valid, bool(helper.get("weapon")), enabled,
-        ), graph, evaluated, ctl, deform
+        for _, helper in entries:
+            orientation = bool(helper.get("orientation"))
+            loc = _constraint_for(ctl, helper, _POSITION) if ctl is not None else None
+            rot = _constraint_for(ctl, helper, _ROTATION) if ctl is not None and orientation else None
+            muted = loc is not None and loc.mute
+            activation = min(1.0, max(0.0, helper.evaluated_get(graph).get("activation", 1.0)))
+            enabled = loc is not None and not muted and activation > 0.0
+            influence = loc.influence if not muted and loc is not None else 0.0
+            valid = (loc is not None and loc.type == _KINDS[_POSITION] and loc.target is not None
+                     and loc.is_valid and loc.target.original == helper)
+            if orientation:
+                valid = (valid and rot is not None and rot.type == _KINDS[_ROTATION]
+                         and rot.target is not None and rot.target.original == helper
+                         and rot.is_valid and rot.mute == loc.mute and rot.influence == loc.influence)
+            valid = (valid and (not helper.get("external") or helper.parent is not None)
+                     and context.view_layer.objects.get(helper.name) == helper
+                     and (helper.parent is None or context.view_layer.objects.get(helper.parent.name) == helper.parent))
+            yield ContactState(
+                limb, helper, helper.parent, orientation, helper.get("start"), helper.get("end"),
+                influence, switch is not None and _is_ik(switch), valid, bool(helper.get("weapon")), enabled,
+                helper["token"], helper.get("blend_in", 0.0), helper.get("blend_out", 0.0), activation, muted,
+            ), graph, evaluated, ctl, deform
 
 
 def contact_states(context, rig):
@@ -545,18 +649,19 @@ def _angle(a, b):
 def contact_residuals(context, rig):
     """Measure evaluated DEF head and orientation errors relative to the anchor.
 
-    A disabled contact has no meaningful residual. Non-zero IK/FK blend,
-    unreachable endpoints and edits to foot roll/tweak controls are reported;
-    this function never modifies the animation to satisfy the contact.
+    During partial influence the raw gap to the full target is informative, not
+    a reachability verdict. Full-weight error beyond tolerance is a violation.
+    A disabled contact has no residual. This function never changes animation.
     """
     results = []
     for state, graph, evaluated, ctl, deform in _read(context, rig):
         limb, influence, ik = state.limb, state.influence, state.ik
         if not state.valid:
             results.append(ContactResidual(limb, None, None, influence, ik, False,
-                                           "Contrainte ou cible de contact invalide."))
+                                           "Contrainte ou cible de contact invalide.", state.contact_id))
         elif not state.active:
-            results.append(ContactResidual(limb, None, None, influence, ik, True))
+            results.append(ContactResidual(limb, None, None, influence, ik, True,
+                                           contact_id=state.contact_id))
         else:
             goal = _matrix(state.anchor, graph)
             current = evaluated.matrix_world @ deform.matrix
@@ -567,11 +672,15 @@ def contact_residuals(context, rig):
             angle = (_angle(goal.to_quaternion() @ Quaternion(state.anchor["def_rotation"]),
                             current.to_quaternion()) if state.orientation else None)
             reached = distance <= _DISTANCE_TOLERANCE and (angle is None or angle <= _ANGLE_TOLERANCE)
-            message = ("Mode IK requis (IK_FK = 0)." if not ik else
-                       "Cible non atteinte par l’os DEF évalué." if not reached else "")
+            full_weight = influence >= 1.0 - _WEIGHT_TOLERANCE
+            issue = ("Mode IK requis (IK_FK = 0)." if not ik else
+                     "Cible non atteinte par l’os DEF évalué." if full_weight and not reached else "")
             if state.weapon:
-                message = message or _weapon_issue(rig, evaluated, graph, state)
-            results.append(ContactResidual(limb, distance, angle, influence, ik, not message, message))
+                issue = issue or _weapon_issue(rig, evaluated, graph, state)
+            message = issue or ("Influence partielle : écart à la cible pleine, sans verdict de portée."
+                                if not full_weight else "")
+            results.append(ContactResidual(limb, distance, angle, influence, ik, not issue, message,
+                                           state.contact_id))
     return results
 
 
@@ -580,7 +689,7 @@ def _weapon_issue(rig, evaluated, graph, state):
     if helper is not None and helper.get("weapon_object") == state.target:
         driven = _constraint_for(state.target.evaluated_get(graph), helper, _PROP)
         if (driven is not None and driven.is_valid and not driven.mute
-                and driven.influence == state.influence):
+                 and driven.influence == 1.0):
             try:
                 _, switch, _ = _bones(evaluated, "HAND_" + helper["primary"])
             except (KeyError, ValueError):
@@ -606,10 +715,10 @@ def setup_weapon(context, rig, weapon, primary="R", secondary=True, start=None, 
         raise ValueError("Un accessoire est déjà configuré ; retirer la configuration existante.")
     main_limb = "HAND_" + primary
     other = "HAND_" + ("L" if primary == "R" else "R")
-    if _helper(rig, _PREFIX + main_limb) is not None:
+    if _contact_index(rig)[main_limb]:
         raise ValueError("La main principale doit rester libre pour piloter l’accessoire.")
-    if secondary and _helper(rig, _PREFIX + other) is not None:
-        raise ValueError("Retirer le contact existant de la main secondaire.")
+    if secondary:
+        _check_overlap(rig, other, start, end)
     main = _bones(rig, main_limb)[0]
     if secondary:
         _check_primary(rig, main, _bones(rig, other)[0])
@@ -646,7 +755,7 @@ def setup_weapon(context, rig, weapon, primary="R", secondary=True, start=None, 
                 raise ValueError("La transformation évaluée de l’accessoire saute à la capture.")
         except Exception:
             if captured_secondary:
-                unlock_contact(context, rig, other)
+                unlock_contact(context, rig, other, contact_id=grip["token"])
             _remove(weapon, helper, _PROP)
             if not had_weapon_animation and weapon.animation_data is not None:
                 weapon.animation_data_clear()
@@ -665,10 +774,10 @@ def clear_weapon(context, rig):
         del rig[_WEAPON]
     if helper is None:
         return False
-    for limb in ("HAND_L", "HAND_R"):
-        grip = _helper(rig, _PREFIX + limb)
-        if grip is not None and grip.get("weapon"):
-            unlock_contact(context, rig, limb)
+    for limb, entries in _contact_index(rig).items():
+        for key, grip in entries:
+            if grip.get("weapon"):
+                _delete_contact(rig, limb, key, grip)
     _remove(helper.get("weapon_object"), helper, _PROP)
     bpy.data.objects.remove(helper, do_unlink=True)
     context.view_layer.update()
@@ -678,5 +787,7 @@ def clear_weapon(context, rig):
 def clear_contacts(context, rig):
     """Remove all owned contacts and the optional prop setup."""
     clear_weapon(context, rig)
-    for limb in _LIMBS:
-        unlock_contact(context, rig, limb)
+    for limb, entries in _contact_index(rig).items():
+        for key, helper in entries:
+            _delete_contact(rig, limb, key, helper)
+    context.view_layer.update()

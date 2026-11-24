@@ -1,6 +1,6 @@
 # Quick Rigging, interpolation CPU et export GLB
 
-Les étapes ci-dessous restent valables en 0.3.0. Voir aussi le [guide de l’éditeur de poses, des contacts et de la bibliothèque](pose-editor.md).
+Le flux de base ci-dessous reste disponible en 0.4.0. Pour les nouveaux repères, les contacts multiphases et les accessoires, suivre la [recette du Sprint 3](sprint-3.md#recette-interactive-à-effectuer). Voir aussi le [guide de l’éditeur de poses et de la bibliothèque](pose-editor.md).
 
 ## Quick Rigging
 

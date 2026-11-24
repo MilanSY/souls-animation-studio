@@ -108,32 +108,33 @@ class SOULS_PT_contacts(StudioSection, bpy.types.Panel):
         _contact_range(layout, settings)
         row = layout.row(align=True)
         row.operator("sas.lock_contact")
-        row.operator("sas.unlock_contact")
         if rig is not None:
             try:
-                states = {state.limb: state for state in contacts.contact_states(context, rig)}
+                states = contacts.contact_states(context, rig)
             except (RuntimeError, ValueError) as error:
                 layout.label(text=str(error), icon="ERROR")
             else:
-                selected = states.get(settings.contact_limb)
-                if selected is not None and selected.valid and callable(
-                    getattr(contacts, "set_contact_enabled", None)
-                ):
-                    text = "Pause Contact" if selected.enabled else "Resume Contact"
-                    layout.operator("sas.set_contact_enabled", text=text).enabled = not selected.enabled
-                    if not selected.enabled:
-                        layout.label(text="Resume uses the original anchor.")
-                for token, label, _description in LIMBS:
-                    state = states.get(token)
+                labels = {token: label for token, label, _ in LIMBS}
+                for state in states:
                     status = (
-                        "Free" if state is None else
                         "Invalid contact" if not state.valid else
                         "Paused" if not state.enabled else
-                        "Outside range" if not state.active else
+                        "Inactive" if not state.active else
                         "IK required" if not state.ik else
-                        "Weapon grip" if state.weapon else "Locked"
+                        "Weapon grip" if state.weapon else f"{state.influence:.0%} influence"
                     )
-                    layout.label(text=f"{label}: {status}")
+                    span = "All frames" if state.start is None else f"{state.start:g}–{state.end:g}"
+                    box = layout.box()
+                    box.label(text=f"{labels.get(state.limb, state.limb)} · {span} · {status}")
+                    if state.weapon or state.limb != settings.contact_limb:
+                        continue
+                    box.label(text=f"In/Out: {state.blend_in:g}/{state.blend_out:g} · Activation: {state.activation:.0%}")
+                    actions = box.row(align=True)
+                    toggle = actions.operator("sas.set_contact_enabled", text="Resume" if state.muted else "Pause")
+                    toggle.contact_id, toggle.enabled = state.contact_id, state.muted
+                    key = actions.operator("sas.key_contact_activation", text="Key")
+                    key.contact_id, key.activation = state.contact_id, state.activation
+                    actions.operator("sas.unlock_contact", text="Remove").contact_id = state.contact_id
 
 
 class SOULS_PT_weapon(StudioSection, bpy.types.Panel):
@@ -270,7 +271,18 @@ class SOULS_PT_ai(StudioSection, bpy.types.Panel):
     bl_label = "AI Inbetweening — Unavailable"
 
     def draw(self, context):
-        self.layout.label(text="No AI backend is integrated.", icon="INFO")
+        self.layout.label(text="No AI motion backend is integrated.", icon="INFO")
+
+
+class SOULS_PT_ai_rigging(StudioSection, bpy.types.Panel):
+    bl_label = "AI Rigging — Experimental"
+
+    def draw(self, context):
+        layout = self.layout
+        layout.label(text="Optional: Linux / NVIDIA CUDA.", icon="INFO")
+        layout.label(text="Deform rig only; use Quick Rigging for pose controls.")
+        layout.operator("sas.experimental_unirig")
+        layout.operator("sas.prepare_smartpose_bridge")
 
 
 class SOULS_PT_export(StudioSection, bpy.types.Panel):
@@ -284,7 +296,7 @@ class SOULS_PT_export(StudioSection, bpy.types.Panel):
         layout.label(text="Frame range is inclusive.")
         _range(layout, settings)
         layout.prop(settings, "export_filepath")
-        layout.operator("sas.export_glb")
+        layout.operator_menu_enum("sas.export_glb", "export_mode")
 
 
 class SOULS_PT_diagnostics(StudioSection, bpy.types.Panel):
@@ -307,28 +319,34 @@ class SOULS_PT_quick_rig(StudioSection, bpy.types.Panel):
         layout = self.layout
         settings = context.scene.sas_settings
         layout.label(text="Geometric fit; not AI.")
-        layout.label(text="Symmetric A-pose, +Z up, -Y forward.")
+        layout.label(text="Symmetric T/A-pose, +Z up, -Y forward.")
         _target(layout, settings, "mesh", resolve_mesh(context))
         _target(layout, settings, "metarig", resolve_metarig(context))
         edit_object = context.edit_object
         if edit_object is not None and edit_object.get("sas_role") == "metarig":
             layout.label(text="Adjust bones manually, then finish.")
-            layout.operator("sas.finish_metarig_edit")
+            layout.operator_menu_enum("sas.mirror_metarig", "source")
+            layout.operator("sas.finish_metarig_edit", text="Keep Landmark Edits").cancel = False
+            layout.operator("sas.finish_metarig_edit", text="Discard Landmark Edits").cancel = True
             return
         layout.operator("sas.quick_rig", icon="ARMATURE_DATA")
         steps = layout.column(align=True)
         steps.label(text="Manual Rigging")
         steps.operator("sas.create_meta_rig", text="1. Create Meta-rig")
-        steps.operator("sas.fit_skeleton", text="2. Fit to Mesh")
+        steps.operator_menu_enum("sas.fit_skeleton", "pose", text="2. Fit to Mesh (T/A)")
+        steps.operator("sas.preview_metarig")
+        steps.operator("sas.restore_metarig_fit")
         steps.operator("sas.edit_metarig", text="3. Adjust in Edit Mode")
         steps.operator("sas.generate_control_rig", text="4. Generate Control Rig")
-        steps.operator("sas.automatic_skinning", text="5. Bind with Automatic Weights")
+        steps.operator("sas.automatic_skinning", text="5. Bind (GLB workflow)").separate = False
+        steps.operator("sas.automatic_skinning", text="Bind to Separate DEF Rig (Blender)").separate = True
         layout.operator("sas.validate_rig")
+        layout.operator("sas.compare_skinning_volume")
         layout.operator("sas.reset_pose", text="Reset Entire Rig Pose")
 
 
 CLASSES = (
     SOULS_MT_poses, SOULS_MT_blend_poses,
     SOULS_PT_studio, SOULS_PT_contacts, SOULS_PT_weapon, SOULS_PT_poses,
-    SOULS_PT_cpu, SOULS_PT_ai, SOULS_PT_export, SOULS_PT_diagnostics, SOULS_PT_quick_rig,
+    SOULS_PT_cpu, SOULS_PT_ai, SOULS_PT_ai_rigging, SOULS_PT_export, SOULS_PT_diagnostics, SOULS_PT_quick_rig,
 )
