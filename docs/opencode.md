@@ -1,11 +1,18 @@
-# OpenCode 2.4.1 — autonomie locale
+# OpenCode V1 — configuration du dépôt
 
-`.opencode/opencode.jsonc` et les cinq profils de `.opencode/agents/` utilisent la règle V2 `permissions: [{ "action": "*", "resource": "*", "effect": "allow" }]`. Elle remplace les confirmations et refus du dépôt, ainsi que les anciennes listes de fichiers et de délégataires par agent. Les rôles sont inchangés : `addon-director` reste principal et les quatre spécialistes restent des sous-agents. `experimental.subagent_depth: 2` permet à un spécialiste de lancer un sous-agent à son tour.
+Le dépôt cible OpenCode V1 (version de référence : **1.18.34**) sous Linux et Windows. `.opencode/opencode.jsonc` sélectionne `addon-director` comme agent principal par défaut. Les quatre spécialistes déclarés dans `.opencode/agents/` (`blender-developer`, `rigging-specialist`, `motion-ai-engineer` et `qa-tester`) utilisent `mode: subagent` et sont appelés par l’outil `task`. Aucun modèle, chemin absolu ni programme propre à un OS n’est imposé par le dépôt.
 
-Cette règle autorise, sans confirmation **propre au dépôt**, les lectures et écritures, les commandes shell (dont Git, Python, Blender headless, installations en venv et téléchargements), les recherches web, les outils MCP disponibles, la délégation et les accès externes nécessaires aux tests. Elle n’installe ni ne connecte de serveur MCP et ne supplante pas les restrictions imposées par le runtime ou une politique gérée. En particulier, OpenCode 2.4.1 affiche encore un refus pour l’action et le skill `browser` avec un profil utilisateur vierge. Ce refus ne vise pas `websearch` ou `webfetch`.
+Le fichier de projet et les cinq profils utilisent la clé V1 `permission` au singulier, avec la règle générique `"*": "allow"`. Cette règle ne demande pas de confirmation au niveau du dépôt et peut aussi élargir les droits des agents intégrés. Elle n’installe aucun serveur MCP et ne lève pas les restrictions du runtime. La redélégation dépend de la disponibilité de `task` dans la session du spécialiste, pas d’un réglage de profondeur dans ce dépôt.
 
-La règle de projet s’applique aussi aux profils intégrés lorsqu’ils sont utilisés dans ce dépôt. Dans les règles chargées par OpenCode 2.4.1, elle l’emporte notamment sur le refus d’édition de `Plan` et sur les refus de délégation de `Explore` et `General`. Ne pas supposer que ces profils gardent ici leurs restrictions habituelles.
+**Ce n’est pas un bac à sable.** Les agents doivent suivre [`AGENTS.md`](../AGENTS.md), notamment travailler dans le dépôt ou dans des répertoires de test isolés, ne modifier ni le système ni la configuration globale, et ne pas pousser sans demande explicite.
 
-**Ce n’est pas un bac à sable.** Le shell dispose des droits du compte système qui l’exécute. Les agents doivent suivre [`AGENTS.md`](../AGENTS.md) : spécialités, coordination des fichiers, répertoires de test isolés, aucun `sudo`, aucune modification du système, du projet Godot principal ou de la configuration globale, aucun accès aux données personnelles ni `git push` sans demande explicite.
+Depuis la racine du dépôt, les commandes suivantes vérifient la version, la configuration résolue et les profils :
 
-Depuis la racine du projet, `opencode --version`, `opencode debug config --standalone` et `opencode debug agents --standalone` permettent de vérifier le chargement. Aucun redémarrage n’est nécessaire : OpenCode recharge les changements. Utiliser `/reload` si la session ouverte affiche encore les anciens profils.
+```text
+opencode --version
+opencode debug config
+opencode agent list
+opencode debug agent addon-director
+```
+
+Pour tester la délégation, ouvre une nouvelle session avec `addon-director` et demande-lui d’appeler chaque spécialiste via `task` pour une vérification en lecture seule. Vérifie les quatre appels et leurs retours, pas seulement le résumé du directeur. Quitte et redémarre OpenCode après toute modification de la configuration ou des profils.
