@@ -5,12 +5,13 @@ from math import cos, pi, sin
 from pathlib import Path
 import sys
 import unittest
+from unittest.mock import patch
 
 import bpy
 from mathutils import Euler, Quaternion
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "addon"))
-from animation import generate_inbetweens, keyframes_in_range, selected_keyframes_in_range
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from addon.animation import generate_inbetweens, keyframes_in_range, selected_keyframes_in_range
 
 
 def channels(action, slot):
@@ -165,6 +166,133 @@ class BlenderInbetweeningTests(unittest.TestCase):
                 generate_inbetweens(bpy.context, self.rig, start, end, mode, keyframes=keys)
         self.assertEqual(len(bpy.data.actions), before)
         self.assertEqual(self.rig.animation_data.action, self.action)
+
+    def test_contact_evaluation_failure_restores_state(self):
+        from addon import contacts
+        from addon.animation import generate_contact_inbetweens
+
+        self.scene.frame_set(7, subframe=0.25)
+        before = snapshot(self.curves)
+        actions = set(bpy.data.actions)
+
+        def fail(context, rig):
+            self.assertNotEqual(rig.animation_data.action, self.action)
+            raise RuntimeError("fixture: evaluator failure")
+
+        with patch.object(contacts, "contact_residuals", fail):
+            with self.assertRaisesRegex(RuntimeError, "fixture: evaluator failure"):
+                generate_contact_inbetweens(bpy.context, self.rig, 0, 12, "linear")
+        self.assertEqual(self.rig.animation_data.action, self.action)
+        self.assertEqual(self.rig.animation_data.action_slot, self.slot)
+        self.assertEqual(self.scene.frame_current_final, 7.25)
+        self.assertEqual(snapshot(self.curves), before)
+        self.assertEqual(set(bpy.data.actions), actions)
+
+    def test_persisted_contacts_and_impossible_target_on_actual_rigify(self):
+        from addon import contacts
+        from addon.animation import generate_contact_inbetweens
+
+        context, rig, scene = bpy.context, self.rig, self.scene
+        anim = rig.animation_data
+        fixture = bpy.data.actions.new("Contact fixture")
+        prop = bpy.data.objects.new("Contact fixture target", None)
+        scene.collection.objects.link(prop)
+
+        def cleanup():
+            contacts.clear_contacts(context, rig)
+            anim.action, anim.action_slot = self.action, self.slot
+            scene.frame_set(7, subframe=0.25)
+            bpy.data.objects.remove(prop, do_unlink=True)
+            bpy.data.actions.remove(fixture)
+
+        self.addCleanup(cleanup)
+        anim.action = fixture
+        for name in ("upper_arm_parent.L", "thigh_parent.R"):
+            switch = rig.pose.bones[name]
+            switch["IK_FK"] = 0.0
+            switch["IK_Stretch"] = 0.0
+        for time, y in ((1, 0.0), (3.5, -0.01), (6, -0.02)):
+            rig.pose.bones["root"].location = (0.0, 0.0, 0.0)
+            rig.pose.bones["root"].rotation_quaternion = (1, 0, 0, 0)
+            self.euler.rotation_euler = (0, 0, 0)
+            self.euler.location = (0, y, 0)
+            rig.pose.bones["root"].keyframe_insert("location", frame=time)
+            rig.pose.bones["root"].keyframe_insert("rotation_quaternion", frame=time)
+            self.euler.keyframe_insert("rotation_euler", frame=time)
+            self.euler.keyframe_insert("location", frame=time)
+        for time, x in ((1, 0), (4, 0), (5, 20), (6, 20)):
+            prop.location.x = x
+            prop.keyframe_insert("location", index=0, frame=time)
+        source_slot = anim.action_slot
+        original = snapshot(channels(fixture, source_slot))
+        scene.frame_set(1)
+        grip = contacts.lock_contact(
+            context, rig, "HAND_L", target=prop, orientation=True, start=1, end=6
+        )
+        contacts.lock_contact(context, rig, "FOOT_R", start=2, end=4.5)
+
+        def at(time):
+            scene.frame_set(int(time), subframe=time % 1)
+
+        def pose():
+            evaluated = rig.evaluated_get(context.evaluated_depsgraph_get())
+            return tuple(tuple(tuple(row) for row in bone.matrix) for bone in evaluated.pose.bones)
+
+        locked_poses = {}
+        for time in (1, 3.5, 6):
+            at(time)
+            locked_poses[time] = pose()
+        at(2.25)
+        baseline = generate_inbetweens(context, rig, 1, 6, "smooth", keyframes=[1, 6])
+        self.addCleanup(bpy.data.actions.remove, baseline)
+        result = generate_contact_inbetweens(context, rig, 1, 6, "smooth", keyframes=[1, 6])
+        self.addCleanup(bpy.data.actions.remove, result.action)
+        self.assertEqual(anim.action, fixture)
+        self.assertEqual(anim.action_slot, source_slot)
+        self.assertEqual(scene.frame_current_final, 2.25)
+        self.assertEqual(snapshot(channels(fixture, source_slot)), original)
+        slot = result.action.slots[source_slot.identifier]
+        self.assertEqual(snapshot(channels(result.action, slot)),
+                         snapshot(channels(baseline, baseline.slots[source_slot.identifier])))
+        rows = {(row.frame, row.limb): row for row in result.residuals}
+        self.assertEqual({frame for frame, limb in rows if limb == "FOOT_R"}, {2, 3, 3.5, 4})
+        self.assertEqual({frame for frame, limb in rows if limb == "HAND_L"}, {1, 2, 3, 3.5, 4, 5, 6})
+        self.assertTrue(rows[2, "FOOT_R"].satisfied, rows[2, "FOOT_R"])
+        self.assertTrue(rows[2, "HAND_L"].satisfied, rows[2, "HAND_L"])
+        self.assertGreater(rows[5, "HAND_L"].distance, 10)
+        self.assertFalse(rows[5, "HAND_L"].locked)
+        self.assertTrue(rows[6, "HAND_L"].locked)
+        self.assertIn(rows[5, "HAND_L"], result.violations)
+        self.assertIn(rows[6, "HAND_L"], result.violations)
+        self.assertTrue(rows[3.5, "HAND_L"].locked)
+        print("CONTACT_FIXTURE:", rows[2, "FOOT_R"], rows[2, "HAND_L"], rows[5, "HAND_L"])
+
+        try:
+            anim.action, anim.action_slot = result.action, slot
+            for time, expected in locked_poses.items():
+                at(time)
+                self.assertEqual(pose(), expected)
+            at(5)
+            direct = next(row for row in contacts.contact_residuals(context, rig) if row.limb == "HAND_L")
+            self.assertEqual(direct.distance, rows[5, "HAND_L"].distance)
+            self.assertEqual(direct.orientation, rows[5, "HAND_L"].orientation_error)
+        finally:
+            anim.action, anim.action_slot = fixture, source_slot
+
+        # An invalid native constraint must not become a successful or absent sample.
+        location_lock = next(
+            c for c in rig.pose.bones["hand_ik.L"].constraints
+            if c.type == "COPY_LOCATION" and c.target == grip.anchor
+        )
+        try:
+            location_lock.target = None
+            invalid = generate_contact_inbetweens(context, rig, 1, 6, "linear")
+            self.addCleanup(bpy.data.actions.remove, invalid.action)
+            row = next(row for row in invalid.violations if row.frame == 2 and row.limb == "HAND_L")
+            self.assertIsNone(row.distance)
+            self.assertTrue(row.message)
+        finally:
+            location_lock.target = grip.anchor
 
 
 if __name__ == "__main__":

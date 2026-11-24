@@ -4,19 +4,36 @@
 bash scripts/build_extension.sh
 bash scripts/test_headless.sh
 # Ou pour vérifier un ZIP précis :
-bash scripts/test_headless.sh dist/souls_animation_studio-0.2.0.zip
+bash scripts/test_headless.sh dist/souls_animation_studio-0.3.0.zip
+bash tests/test_shell_failures.sh dist/souls_animation_studio-0.3.0.zip
 ```
 
 Le test utilise un profil Blender temporaire hors ligne et le vrai ZIP installé,
 non le code de l’extension dans le dépôt. Rigify doit être disponible dans la
 distribution Blender testée (aucun téléchargement). `BLENDER_BIN` permet de
 tester un autre exécutable. Un échec Python ou de `unittest` est remonté au shell.
+La sonde d’échec vérifie ce comportement avec un ZIP corrompu et une assertion
+Python volontairement fausse dans un vrai processus Blender. Le lanceur vérifie
+aussi la désactivation/réactivation, puis la désinstallation réelle et l’absence
+de fichiers et d’enregistrements de l’extension après redémarrage.
 
 La suite couvre le parcours par opérateurs (création du méta-rig, ajustement
 automatique, retouche en Edit Mode, génération et skinning), le Quick Rig et
 la déformation évaluée du bassin, de la colonne, de la tête, des mains et des
 jambes/pieds. Le maillage synthétique est contrôlé comme une surface fermée
 d’un seul composant et les joints du GLB doivent correspondre aux seuls os DEF.
+
+Les tests Smart Pose vérifient les commandes de sélection et de remise à zéro
+partielle, le verrouillage des pieds avec ou sans cible, la prise à deux mains
+avec un accessoire synthétique, les résidus de contact aux images clés et aux
+images générées, et la conservation de l’Action source. Ils comparent les os DEF
+évalués et journalisent les écarts et le temps de calcul (pas la fluidité du
+viewport). La bibliothèque est testée pour la capture, l’application partielle,
+le mélange, le miroir, le duplicata, la suppression, l’insertion de clés et le
+JSON. Un second Blender rouvre un fichier `.blend` pour revérifier une pose
+enregistrée et un contact borné, sans auto-exécution de scripts. Le test
+Undo/Redo initialise explicitement la pile headless et appelle les opérateurs
+en mode `EXEC_DEFAULT` : il ne teste pas les gestes clavier ou souris.
 
 ## Import expérimental dans Godot
 
@@ -35,4 +52,6 @@ temporaires, vérifie les bones/binds et applique l’animation à deux instants
 pour observer le mouvement du bone de déformation.
 
 Aucun de ces tests ne valide le rendu, les interactions de la sidebar, la
-qualité visuelle de la déformation, ni l’intégration dans le projet du jeu.
+qualité visuelle de la déformation, la collision du pied avec une surface, ni
+l’intégration dans le projet du jeu. Le ghost n’est pas implémenté ; le test
+vérifie qu’il est signalé comme indisponible, sans bouton utilisable.

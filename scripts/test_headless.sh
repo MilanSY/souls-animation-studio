@@ -43,6 +43,13 @@ mkdir -p -- "$BLENDER_USER_RESOURCES"
 printf 'ZIP testé : %s\n' "$archive"
 "$blender" --background --factory-startup --offline-mode --command extension \
     validate "$archive"
+ext_id="$(python3 -c '
+import sys
+import tomllib
+from zipfile import ZipFile
+with ZipFile(sys.argv[1]) as archive:
+    print(tomllib.loads(archive.read("blender_manifest.toml").decode())["id"])
+' "$archive")"
 "$blender" --background --factory-startup --offline-mode --command extension \
     install-file --repo user_default --enable "$archive"
 # Load the isolated preferences saved by the real install in a fresh process.
@@ -50,6 +57,15 @@ printf 'ZIP testé : %s\n' "$archive"
     --python "$root/tests/headless_smoke.py" -- "$archive"
 "$blender" --background --offline-mode --python-exit-code 1 \
     --python "$root/tests/headless_workflow.py" -- "$scratch/reference.glb"
+"$blender" --background --offline-mode --python-exit-code 1 \
+    --python "$root/tests/headless_smartpose.py" -- "$scratch"
+"$blender" --background --offline-mode --disable-autoexec "$scratch/smartpose.blend" \
+    --python-exit-code 1 --python "$root/tests/headless_smartpose.py" -- "$scratch" --reopen
+
+"$blender" --background --offline-mode --command extension remove "$ext_id"
+# A successful command alone doesn't prove that the actual installed add-on is gone.
+"$blender" --background --offline-mode --python-exit-code 1 \
+    --python "$root/tests/headless_uninstalled.py" -- "$ext_id"
 
 # Optionally keep the exact GLB that passed, for a separate Godot import probe.
 if [[ -n "${SOULS_TEST_GLB:-}" ]]; then

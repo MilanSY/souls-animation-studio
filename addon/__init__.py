@@ -6,10 +6,10 @@ import bpy
 from .operators import CLASSES as OPERATOR_CLASSES
 from .operators.settings import SAS_PG_settings
 from .preferences import SOULS_AP_preferences
-from .ui.panel import SOULS_PT_studio
+from .ui.panel import CLASSES as UI_CLASSES
 
 
-CLASSES = (SOULS_AP_preferences, SAS_PG_settings, *OPERATOR_CLASSES, SOULS_PT_studio)
+CLASSES = (SOULS_AP_preferences, SAS_PG_settings, *OPERATOR_CLASSES, *UI_CLASSES)
 
 
 def register():

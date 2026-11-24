@@ -16,11 +16,21 @@ import bpy
 MODULE = "bl_ext.user_default.souls_animation_studio"
 PANEL = "SOULS_PT_studio"
 ARCHIVE = Path(sys.argv[sys.argv.index("--") + 1])
-PANEL_OPERATORS = {
-    "sas.quick_rig", "sas.create_meta_rig", "sas.fit_skeleton", "sas.edit_metarig",
-    "sas.generate_control_rig", "sas.automatic_skinning", "sas.validate_rig",
-    "sas.reset_pose", "sas.generate_inbetweens", "sas.export_glb",
+PANELS = {
+    "SOULS_PT_studio": ("Smart Pose Editor", set()),
+    "SOULS_PT_contacts": ("Contacts", {"sas.lock_contact", "sas.unlock_contact"}),
+    "SOULS_PT_weapon": ("Weapon Setup", {"sas.setup_weapon", "sas.clear_weapon"}),
+    "SOULS_PT_poses": ("Pose Library", set()),
+    "SOULS_PT_cpu": ("CPU Inbetweening", {"sas.generate_inbetweens", "sas.generate_contact_inbetweens"}),
+    "SOULS_PT_ai": ("AI Inbetweening — Unavailable", set()),
+    "SOULS_PT_export": ("Export", {"sas.export_glb"}),
+    "SOULS_PT_diagnostics": ("Diagnostics", {"sas.contact_residuals"}),
+    "SOULS_PT_quick_rig": ("Quick Rigging", {
+        "sas.quick_rig", "sas.create_meta_rig", "sas.fit_skeleton", "sas.edit_metarig",
+        "sas.generate_control_rig", "sas.automatic_skinning", "sas.validate_rig", "sas.reset_pose",
+    }),
 }
+MENUS = ("SOULS_MT_poses", "SOULS_MT_blend_poses")
 
 
 class LayoutRecorder:
@@ -31,6 +41,9 @@ class LayoutRecorder:
         self.children = []
         self.labels = []
         self.operators = []
+        self.properties = []
+        self.menus = []
+        self.operator_calls = []
 
     def _child(self, **kwargs):
         child = LayoutRecorder()
@@ -49,10 +62,21 @@ class LayoutRecorder:
 
     def operator(self, operator, **kwargs):
         self.operators.append(operator)
-        return SimpleNamespace()
+        properties = SimpleNamespace()
+        self.operator_calls.append((operator, properties))
+        return properties
 
-    def prop(self, *args, **kwargs):
+    def prop(self, data, property_name, **kwargs):
+        self.properties.append(property_name)
+
+    def prop_search(self, data, property_name, *args, **kwargs):
+        self.properties.append(property_name)
+
+    def template_list(self, *args, **kwargs):
         pass
+
+    def menu(self, menu, **kwargs):
+        self.menus.append(menu)
 
     def separator(self, **kwargs):
         pass
@@ -81,11 +105,19 @@ class ExtensionSmokeTests(unittest.TestCase):
             self.assertIn("__init__.py", names)
             manifest = tomllib.loads(archive.read("blender_manifest.toml").decode())
             self.assertEqual(manifest["id"], MODULE.rsplit(".", 1)[-1])
+            version = manifest["version"]
+            self.assertEqual(version, "0.3.0")
+            self.assertLessEqual(tuple(map(int, manifest["blender_version_min"].split("."))),
+                                 bpy.app.version)
+            print(f"Extension: {version}; Blender: {bpy.app.version_string}; "
+                  f"Python: {sys.version.split()[0]}", flush=True)
             self.assertEqual(manifest["license"], ["SPDX:GPL-3.0-or-later"])
             self.assertFalse(manifest.get("wheels"))
             permissions = manifest.get("permissions", {})
             self.assertEqual(set(permissions), {"files"})
             self.assertIn("GLB", permissions["files"])
+            self.assertIn("pose", permissions["files"].lower())
+            self.assertLessEqual(len(permissions["files"]), 64)
             for name in names:
                 if name.endswith("/"):
                     continue
@@ -121,36 +153,34 @@ class ExtensionSmokeTests(unittest.TestCase):
         )
 
     def test_panel_locations_and_content(self):
-        panel = getattr(bpy.types, PANEL)
-        self.assertEqual(panel.bl_space_type, "VIEW_3D")
-        self.assertEqual(panel.bl_region_type, "UI")
-        self.assertEqual(panel.bl_label, "Souls Animation Studio")
-        self.assertEqual(panel.bl_category, panel.bl_label)
-        layout = LayoutRecorder()
-        panel.draw(SimpleNamespace(layout=layout), bpy.context)
-        diagnostics = [label for item in layout.walk() for label in item.labels]
-        self.assertEqual(
-            [box.labels[0] for box in layout.boxes],
-            ["Quick Rigging", "CPU Inbetweening", "GLB Export", "Environment Diagnostics"],
-        )
+        draws = {}
+        for name, (label, expected_ops) in PANELS.items():
+            with self.subTest(panel=name):
+                panel = getattr(bpy.types, name)
+                self.assertEqual(panel.bl_space_type, "VIEW_3D")
+                self.assertEqual(panel.bl_region_type, "UI")
+                self.assertEqual(panel.bl_label, label)
+                self.assertEqual(panel.bl_category, "Souls Animation Studio")
+                if name != PANEL:
+                    self.assertEqual(panel.bl_parent_id, PANEL)
+                layout = LayoutRecorder()
+                panel.draw(SimpleNamespace(layout=layout), bpy.context)
+                draws[name] = [label for item in layout.walk() for label in item.labels]
+                operators = [op for item in layout.walk() for op in item.operators]
+                self.assertEqual(set(operators), expected_ops)
+                for operator in operators:
+                    namespace, op_name = operator.split(".", 1)
+                    getattr(getattr(bpy.ops, namespace), op_name).get_rna_type()
+        diagnostics = draws["SOULS_PT_diagnostics"]
         self.assertIn(f"Blender: {bpy.app.version_string}", diagnostics)
         self.assertIn(f"Python: {'.'.join(map(str, sys.version_info[:3]))}", diagnostics)
         self.assertIn("Mode: Headless", diagnostics)
         self.assertIn("Viewport GPU: Not queried in headless mode", diagnostics)
         self.assertIn("AI backends: None integrated", diagnostics)
-        operators = [op for item in layout.walk() for op in item.operators]
-        self.assertEqual(set(operators), PANEL_OPERATORS)
-        for operator in operators:
-            with self.subTest(operator=operator):
-                namespace, name = operator.split(".", 1)
-                getattr(getattr(bpy.ops, namespace), name).get_rna_type()
-
-        for box in layout.boxes:
-            if box.labels and box.labels[0].startswith("AI "):
-                self.assertFalse(
-                    [op for item in box.walk() for op in item.operators],
-                    "Unimplemented AI must not be presented as an action",
-                )
+        self.assertIn("No AI backend is integrated.", draws["SOULS_PT_ai"])
+        self.assertIn("Ghost preview: unavailable.", diagnostics)
+        # The prior full-pose reset remains reachable from Quick Rigging.
+        bpy.ops.sas.reset_pose.get_rna_type()
 
     def test_registration_lifecycle(self):
         preferences_ops = bpy.ops.preferences
@@ -160,12 +190,12 @@ class ExtensionSmokeTests(unittest.TestCase):
         self.addCleanup(self._restore_if_disabled)
         self.assertEqual(preferences_ops.addon_disable(module=MODULE), {"FINISHED"})
         self.assertNotIn(MODULE, bpy.context.preferences.addons)
-        self.assertFalse(hasattr(bpy.types, PANEL))
+        self.assertFalse(any(hasattr(bpy.types, name) for name in (*PANELS, *MENUS)))
         self.assertFalse(hasattr(bpy.context.scene, "sas_settings"))
         self.assertFalse(extension_operators())
         self.assertEqual(preferences_ops.addon_enable(module=MODULE), {"FINISHED"})
         self.assertIn(MODULE, bpy.context.preferences.addons)
-        self.assertTrue(hasattr(bpy.types, PANEL))
+        self.assertTrue(all(hasattr(bpy.types, name) for name in (*PANELS, *MENUS)))
         self.assertTrue(hasattr(bpy.context.scene, "sas_settings"))
         self.assertEqual(extension_operators(), before)
 

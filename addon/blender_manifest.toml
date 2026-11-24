@@ -1,6 +1,6 @@
 schema_version = "1.0.0"
 id = "souls_animation_studio"
-version = "0.2.0"
+version = "0.3.0"
 name = "Souls Animation Studio"
 tagline = "Local tools for character rigging and animation"
 maintainer = "Souls Animation Studio contributors"
@@ -9,7 +9,7 @@ blender_version_min = "5.2.0"
 license = ["SPDX:GPL-3.0-or-later"]
 
 [permissions]
-files = "Write the GLB export to the user-selected destination"
+files = "Import and export pose libraries and write GLB exports"
 
 [build]
 paths_exclude_pattern = ["__pycache__/", "*.pyc", "*.pyo", ".*"]

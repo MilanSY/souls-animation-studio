@@ -1,16 +1,18 @@
-# Souls Animation Studio 0.2.0
+# Souls Animation Studio 0.3.0
 
-Extension Blender libre et hors ligne : **Quick Rigging** pour humanoïdes en A-pose, skinning automatique, **CPU Inbetweening** et export GLB expérimental vers Godot. L’ajustement est géométrique et l’interpolation est numérique : aucune fonctionnalité IA, aucun poids, aucun téléchargement au démarrage.
+Extension Blender libre et hors ligne : **Quick Rigging**, édition de poses Rigify, contacts mains/pieds, bibliothèque de poses et **CPU Inbetweening**. Export GLB expérimental vers Godot. L’ajustement est géométrique et l’interpolation est numérique : aucune fonctionnalité IA, aucun poids, aucun téléchargement au démarrage.
 
 ## Installer et essayer
 
-1. Dans Blender **5.2.2 LTS**, ouvrir **Édition → Préférences → Obtenir des extensions → Installer depuis le disque**, et choisir [`dist/souls_animation_studio-0.2.0.zip`](dist/souls_animation_studio-0.2.0.zip). Le ZIP se reconstruit avec `bash scripts/build_extension.sh`.
+1. Dans Blender **5.2.2 LTS**, ouvrir **Édition → Préférences → Obtenir des extensions → Installer depuis le disque**, et choisir [`dist/souls_animation_studio-0.3.0.zip`](dist/souls_animation_studio-0.3.0.zip). Le ZIP se reconstruit avec `bash scripts/build_extension.sh`.
 2. Dans la vue 3D, appuyer sur `N` et ouvrir **Souls Animation Studio**. Pour générer un rig, **Rigify** doit être disponible sous le module local `rigify` (c’est le cas du paquet Blender Arch testé). L’extension n’installe rien.
-3. Ouvrir [`demo/sas-humanoid.blend`](demo/sas-humanoid.blend), puis lire l’animation de 1 à 37. [`demo/sas-humanoid.glb`](demo/sas-humanoid.glb) contient le même exemple cuit sur les os de déformation.
+3. Ouvrir [`demo/sas-combat.blend`](demo/sas-combat.blend), puis lire l’attaque de 1 à 25. La [bibliothèque locale](demo/sas-combat-poses.json), le [GLB du personnage](demo/sas-combat.glb) et les [rendus CPU](demo/combat-visual-review.jpg) sont séparés. La [démo Sprint 1](demo/sas-humanoid.blend) reste disponible.
 
 - [Guide utilisateur](docs/guide-utilisateur.md)
+- [Guide de l’éditeur de poses et des contacts](docs/pose-editor.md)
 - [Procédure de validation visuelle](docs/validation-visuelle.md)
 - [Rapport Sprint 1](docs/sprint-1.md)
+- [Rapport Sprint 2](docs/sprint-2.md)
 - [Architecture et licences](docs/architecture.md)
 - [Permissions OpenCode du projet](docs/opencode.md)
 

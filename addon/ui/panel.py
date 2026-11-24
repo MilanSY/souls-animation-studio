@@ -3,8 +3,12 @@
 
 import bpy
 
+from .. import animation
 from ..diagnostics import environment_rows
-from ..operators.settings import resolve_mesh, resolve_metarig, resolve_rig
+from ..operators.contacts import contacts
+from ..operators.pose_editor import widget_for
+from ..operators.pose_library import poses
+from ..operators.settings import LIMBS, resolve_mesh, resolve_metarig, resolve_rig
 
 
 def _target(layout, settings, field, resolved):
@@ -13,83 +17,318 @@ def _target(layout, settings, field, resolved):
         layout.label(text=f"Using active: {resolved.name}")
 
 
-def _draw_rigging(layout, context, settings):
-    box = layout.box()
-    box.label(text="Quick Rigging", icon="ARMATURE_DATA")
-    box.label(text="Geometric fit, not AI.")
-    box.label(text="Symmetric humanoid A-pose.")
-    box.label(text="Mesh axes: +Z up, -Y forward.")
-    _target(box, settings, "mesh", resolve_mesh(context))
-    _target(box, settings, "metarig", resolve_metarig(context))
-    _target(box, settings, "rig", resolve_rig(context))
-    edit_object = context.edit_object
-    if edit_object is not None and edit_object.get("sas_role") == "metarig":
-        box.label(text="Adjust bones manually, then finish.")
-        box.operator("sas.finish_metarig_edit")
-        return
-    box.operator("sas.quick_rig")
-
-    steps = box.column(align=True)
-    steps.label(text="Manual Rigging")
-    steps.operator("sas.create_meta_rig", text="1. Create Meta-rig")
-    steps.operator("sas.fit_skeleton", text="2. Fit to Mesh")
-    steps.operator("sas.edit_metarig", text="3. Adjust in Edit Mode")
-    steps.operator("sas.generate_control_rig", text="4. Generate Control Rig")
-    steps.operator("sas.automatic_skinning", text="5. Bind with Automatic Weights")
-    box.operator("sas.validate_rig")
-    box.operator("sas.reset_pose")
+def _range(layout, settings, start="frame_start", end="frame_end"):
+    row = layout.row(align=True)
+    row.prop(settings, start)
+    row.prop(settings, end)
 
 
-def _draw_animation(layout, settings):
-    box = layout.box()
-    box.label(text="CPU Inbetweening", icon="ACTION")
-    box.label(text="Interpolates keyed poses; not AI.")
-    row = box.row(align=True)
-    row.prop(settings, "frame_start")
-    row.prop(settings, "frame_end")
-    box.prop(settings, "inbetween_mode")
-    box.prop(settings, "keyframes")
-    explicit = bool(settings.keyframes.strip())
-    row = box.row()
-    row.enabled = not explicit
-    row.prop(settings, "use_selected_keyframes")
-    if explicit:
-        box.label(text="Explicit list overrides selection.")
-    elif not settings.use_selected_keyframes:
-        box.label(text="Using all keys in range.")
-    box.operator("sas.generate_inbetweens")
-    box.label(text="Creates a separate Action.")
-    box.label(text="Preview in the Action Editor.")
-
-
-def _draw_export(layout, settings):
-    box = layout.box()
-    box.label(text="GLB Export", icon="EXPORT")
-    box.label(text="Uses the active pose / animation.")
-    box.label(text="Frame range is inclusive.")
-    row = box.row(align=True)
-    row.prop(settings, "frame_start")
-    row.prop(settings, "frame_end")
-    box.prop(settings, "export_filepath")
-    box.operator("sas.export_glb")
+def _contact_range(layout, settings):
+    layout.prop(settings, "contact_use_range")
+    if settings.contact_use_range:
+        _range(layout, settings, "contact_start", "contact_end")
 
 
 class SOULS_PT_studio(bpy.types.Panel):
     bl_idname = "SOULS_PT_studio"
-    bl_label = "Souls Animation Studio"
+    bl_label = "Smart Pose Editor"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = "Souls Animation Studio"
 
     def draw(self, context):
         layout = self.layout
-
         settings = context.scene.sas_settings
-        _draw_rigging(layout, context, settings)
-        _draw_animation(layout, settings)
-        _draw_export(layout, settings)
+        rig = resolve_rig(context)
+        if context.mode != "POSE":
+            _target(layout, settings, "rig", rig)
+            if rig is None:
+                layout.label(text="Create or choose a control rig.")
+            else:
+                layout.operator("sas.enter_pose_mode", icon="POSE_HLT")
+        elif rig is None:
+            layout.label(text="Activate a Souls control rig.", icon="INFO")
+        else:
+            layout.label(text=f"Posing: {rig.name}", icon="ARMATURE_DATA")
+            layout.label(text="Click a rig widget, then use G / R.")
+            layout.label(text="Shift-click to extend selection.")
+            body = layout.row(align=True)
+            for token, label in (("HEAD", "Head"), ("HIPS", "Hips"), ("TORSO", "Torso")):
+                body.operator("sas.select_pose_control", text=label).control = token
+            for part, label in (("HAND", "Hand"), ("FOOT", "Foot"), ("ELBOW", "Elbow"), ("KNEE", "Knee")):
+                row = layout.row(align=True)
+                for side in ("L", "R"):
+                    token = f"{part}_{side}"
+                    _bone, mode = widget_for(rig, token)
+                    text = label if mode != "POLE" else f"{label} Pole"
+                    row.operator("sas.select_pose_control", text=f"{text} {side}").control = token
 
-        diagnostics = layout.box()
-        diagnostics.label(text="Environment Diagnostics", icon="INFO")
+            active = context.active_pose_bone
+            mode = next(
+                (
+                    mode for role in ("ELBOW", "KNEE") for side in ("L", "R")
+                    for bone, mode in (widget_for(rig, f"{role}_{side}"),)
+                    if bone == active
+                ), "",
+            ) if active else ""
+            if mode == "ROLL":
+                layout.label(text="Joint direction: rotate on local Y.")
+                layout.label(text="Global orientation: R, Y, Y.")
+                layout.label(text="Use Rigify's Toggle Pole to switch.")
+            elif mode == "POLE":
+                layout.label(text="Move the pole with G.")
+            elif mode == "FK":
+                layout.label(text="Rotate the FK joint with R.")
+            layout.operator("sas.reset_selected_pose", icon="LOOP_BACK")
+
+
+class StudioSection:
+    bl_parent_id = "SOULS_PT_studio"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "Souls Animation Studio"
+    bl_options = {"DEFAULT_CLOSED"}
+
+
+class SOULS_PT_contacts(StudioSection, bpy.types.Panel):
+    bl_label = "Contacts"
+
+    def draw(self, context):
+        layout = self.layout
+        if contacts is None:
+            layout.label(text="Contacts unavailable in this build.", icon="INFO")
+            return
+        settings = context.scene.sas_settings
+        rig = resolve_rig(context)
+        layout.prop(settings, "contact_limb")
+        layout.prop(settings, "contact_target")
+        if settings.contact_target is None:
+            layout.label(text="No target: pin in world space.")
+        layout.prop(settings, "contact_orientation")
+        _contact_range(layout, settings)
+        row = layout.row(align=True)
+        row.operator("sas.lock_contact")
+        row.operator("sas.unlock_contact")
+        if rig is not None:
+            try:
+                states = {state.limb: state for state in contacts.contact_states(context, rig)}
+            except (RuntimeError, ValueError) as error:
+                layout.label(text=str(error), icon="ERROR")
+            else:
+                selected = states.get(settings.contact_limb)
+                if selected is not None and selected.valid and callable(
+                    getattr(contacts, "set_contact_enabled", None)
+                ):
+                    text = "Pause Contact" if selected.enabled else "Resume Contact"
+                    layout.operator("sas.set_contact_enabled", text=text).enabled = not selected.enabled
+                    if not selected.enabled:
+                        layout.label(text="Resume uses the original anchor.")
+                for token, label, _description in LIMBS:
+                    state = states.get(token)
+                    status = (
+                        "Free" if state is None else
+                        "Invalid contact" if not state.valid else
+                        "Paused" if not state.enabled else
+                        "Outside range" if not state.active else
+                        "IK required" if not state.ik else
+                        "Weapon grip" if state.weapon else "Locked"
+                    )
+                    layout.label(text=f"{label}: {status}")
+
+
+class SOULS_PT_weapon(StudioSection, bpy.types.Panel):
+    bl_label = "Weapon Setup"
+
+    def draw(self, context):
+        layout = self.layout
+        if contacts is None:
+            layout.label(text="Weapon setup unavailable in this build.", icon="INFO")
+            return
+        settings = context.scene.sas_settings
+        layout.prop(settings, "weapon")
+        layout.prop(settings, "weapon_primary")
+        layout.prop(settings, "weapon_secondary")
+        layout.label(text="Frame range shared with Contacts.")
+        _contact_range(layout, settings)
+        row = layout.row()
+        row.enabled = settings.weapon is not None
+        row.operator("sas.setup_weapon")
+        if callable(getattr(contacts, "clear_weapon", None)):
+            layout.operator("sas.clear_weapon")
+
+
+def _library_names(context):
+    rig = resolve_rig(context)
+    if poses is None or rig is None:
+        return ()
+    return tuple(poses.pose_names(rig))
+
+
+def _draw_pose_choices(menu, context, field, *, allow_none=False):
+    layout = menu.layout
+    try:
+        names = _library_names(context)
+    except (RuntimeError, ValueError) as error:
+        layout.label(text=str(error), icon="ERROR")
+        return
+    if not names and not allow_none:
+        layout.label(text="No saved poses")
+    choices = (("", "None"),) if allow_none else ()
+    for value, label in (*choices, *((name, name) for name in names)):
+        op = layout.operator("wm.context_set_string", text=label, translate=False)
+        op.data_path = f"scene.sas_settings.{field}"
+        op.value = value
+
+
+class SOULS_MT_poses(bpy.types.Menu):
+    bl_label = "Saved Poses"
+
+    def draw(self, context):
+        _draw_pose_choices(self, context, "pose_name")
+
+
+class SOULS_MT_blend_poses(bpy.types.Menu):
+    bl_label = "Blend With"
+
+    def draw(self, context):
+        _draw_pose_choices(self, context, "pose_blend_with", allow_none=True)
+
+
+class SOULS_PT_poses(StudioSection, bpy.types.Panel):
+    bl_label = "Pose Library"
+
+    def draw(self, context):
+        layout = self.layout
+        if poses is None:
+            layout.label(text="Pose library unavailable in this build.", icon="INFO")
+            return
+        settings = context.scene.sas_settings
+        if resolve_rig(context) is None:
+            layout.label(text="Choose a control rig to edit its library.")
+            return
+        try:
+            saved = set(_library_names(context))
+        except (RuntimeError, ValueError) as error:
+            layout.label(text=str(error), icon="ERROR")
+            return
+        layout.menu("SOULS_MT_poses", text=(
+            settings.pose_name if settings.pose_name in saved else "Choose Saved Pose"
+        ), translate=False)
+        capture = layout.column(align=True)
+        capture.prop(settings, "pose_new_name")
+        capture.prop(settings, "pose_replace")
+        row = capture.row(align=True)
+        create = row.row(align=True)
+        create.enabled = bool(settings.pose_new_name.strip())
+        create.operator("sas.capture_pose", text="Capture")
+        duplicate = row.row(align=True)
+        duplicate.enabled = create.enabled and settings.pose_name in saved
+        duplicate.operator("sas.duplicate_pose", text="Duplicate")
+        layout.prop(settings, "pose_part")
+        transforms = layout.column(align=True)
+        transforms.enabled = settings.pose_name in saved
+        transforms.menu("SOULS_MT_blend_poses", text=(
+            f"Blend: {settings.pose_blend_with}" if settings.pose_blend_with in saved else "Blend: None"
+        ), translate=False)
+        transforms.prop(settings, "pose_weight", slider=True)
+        transforms.prop(settings, "pose_mirror")
+        buttons = transforms.row(align=True)
+        buttons.operator("sas.apply_pose", text="Apply")
+        buttons.operator("sas.delete_pose", text="Delete")
+        layout.operator("sas.key_pose")
+        row = layout.row(align=True)
+        row.operator("sas.import_pose_library", text="Import…")
+        row.operator("sas.export_pose_library", text="Export…")
+
+
+class SOULS_PT_cpu(StudioSection, bpy.types.Panel):
+    bl_label = "CPU Inbetweening"
+
+    def draw(self, context):
+        layout = self.layout
+        settings = context.scene.sas_settings
+        layout.label(text="Interpolates keyed poses; not AI.")
+        _range(layout, settings)
+        layout.prop(settings, "inbetween_mode")
+        layout.prop(settings, "keyframes")
+        explicit = bool(settings.keyframes.strip())
+        row = layout.row()
+        row.enabled = not explicit
+        row.prop(settings, "use_selected_keyframes")
+        if explicit:
+            layout.label(text="Explicit list overrides selection.")
+        elif not settings.use_selected_keyframes:
+            layout.label(text="Using all keys in range.")
+        layout.operator("sas.generate_inbetweens")
+        if callable(getattr(animation, "generate_contact_inbetweens", None)):
+            layout.operator("sas.generate_contact_inbetweens")
+        layout.label(text="Creates a separate Action.")
+        layout.label(text="Preview in the Action Editor.")
+
+
+class SOULS_PT_ai(StudioSection, bpy.types.Panel):
+    bl_label = "AI Inbetweening — Unavailable"
+
+    def draw(self, context):
+        self.layout.label(text="No AI backend is integrated.", icon="INFO")
+
+
+class SOULS_PT_export(StudioSection, bpy.types.Panel):
+    bl_label = "Export"
+
+    def draw(self, context):
+        layout = self.layout
+        settings = context.scene.sas_settings
+        _target(layout, settings, "mesh", resolve_mesh(context))
+        layout.label(text="Uses the active pose / animation.")
+        layout.label(text="Frame range is inclusive.")
+        _range(layout, settings)
+        layout.prop(settings, "export_filepath")
+        layout.operator("sas.export_glb")
+
+
+class SOULS_PT_diagnostics(StudioSection, bpy.types.Panel):
+    bl_label = "Diagnostics"
+
+    def draw(self, context):
+        layout = self.layout
         for name, value in environment_rows():
-            diagnostics.label(text=f"{name}: {value}")
+            layout.label(text=f"{name}: {value}")
+        layout.label(text="Ghost preview: unavailable.")
+        layout.label(text="Balance analysis: unavailable.")
+        if contacts is not None:
+            layout.operator("sas.contact_residuals")
+
+
+class SOULS_PT_quick_rig(StudioSection, bpy.types.Panel):
+    bl_label = "Quick Rigging"
+
+    def draw(self, context):
+        layout = self.layout
+        settings = context.scene.sas_settings
+        layout.label(text="Geometric fit; not AI.")
+        layout.label(text="Symmetric A-pose, +Z up, -Y forward.")
+        _target(layout, settings, "mesh", resolve_mesh(context))
+        _target(layout, settings, "metarig", resolve_metarig(context))
+        edit_object = context.edit_object
+        if edit_object is not None and edit_object.get("sas_role") == "metarig":
+            layout.label(text="Adjust bones manually, then finish.")
+            layout.operator("sas.finish_metarig_edit")
+            return
+        layout.operator("sas.quick_rig", icon="ARMATURE_DATA")
+        steps = layout.column(align=True)
+        steps.label(text="Manual Rigging")
+        steps.operator("sas.create_meta_rig", text="1. Create Meta-rig")
+        steps.operator("sas.fit_skeleton", text="2. Fit to Mesh")
+        steps.operator("sas.edit_metarig", text="3. Adjust in Edit Mode")
+        steps.operator("sas.generate_control_rig", text="4. Generate Control Rig")
+        steps.operator("sas.automatic_skinning", text="5. Bind with Automatic Weights")
+        layout.operator("sas.validate_rig")
+        layout.operator("sas.reset_pose", text="Reset Entire Rig Pose")
+
+
+CLASSES = (
+    SOULS_MT_poses, SOULS_MT_blend_poses,
+    SOULS_PT_studio, SOULS_PT_contacts, SOULS_PT_weapon, SOULS_PT_poses,
+    SOULS_PT_cpu, SOULS_PT_ai, SOULS_PT_export, SOULS_PT_diagnostics, SOULS_PT_quick_rig,
+)

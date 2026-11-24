@@ -1,7 +1,19 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Operator plumbing; the domain modules own Blender data transformations."""
 
+from importlib import import_module
+
 from .settings import resolve_mesh, resolve_metarig, resolve_rig
+
+
+def optional_domain(name):
+    qualified_name = f"{__package__.rsplit('.', 1)[0]}.{name}"
+    try:
+        return import_module(qualified_name)
+    except ModuleNotFoundError as error:
+        if error.name != qualified_name:
+            raise
+        return None
 
 
 class StudioOperator:

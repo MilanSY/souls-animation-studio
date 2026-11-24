@@ -10,6 +10,34 @@ La référence CPU n’est pas un modèle IA. Elle ne télécharge rien et ne re
 - Le résultat est une copie nommée de l’action, conservée par un utilisateur fictif. Il n’active pas la copie et ne change ni l’action source ni l’image courante. L’action source, son slot et ses clés ne sont pas modifiés. Les coordonnées des clés originales sont conservées dans la copie et l’égalité exacte des valeurs de courbes est vérifiée à chaque ancre traitée. La copie n’est toutefois pas identique entre clés : ses segments interpolés et leurs poignées changent et des raccords proches des bornes peuvent changer hors intervalle si les courbes sont clairsemées. Entre les images échantillonnées, Blender utilise ses F-Curves ; il ne réévalue pas la SLERP, notamment lors des sauts de représentation Euler ou de signe quaternion.
 - Le calcul vise l’action active, pas la pile NLA, et refuse le mode tweak NLA, les actions avec plusieurs strips remplis pour le slot actif, ainsi que les courbes à régénérer avec modificateurs ou échantillons natifs. Les erreurs de demande sont des `ValueError`, l’absence ou l’incompatibilité des données Blender sont signalées par `RuntimeError`.
 
+## Contacts (mode explicite)
+
+`generate_contact_inbetweens(context, rig, start, end, mode, keyframes=None)` produit une
+copie CPU et demande à Blender de résoudre les contacts natifs déjà persistés sur le rig.
+L’évaluateur assigne temporairement la copie au rig réel afin de conserver les cibles,
+pilotes et dépendances de la scène. Il restaure l’action source, son slot et l’image
+courante (sous-image comprise), y compris en cas d’erreur. Il compare à l’identique les
+matrices de la pose source et de la copie aux ancres, avec le même rig et les mêmes
+contraintes ; une différence rejette et supprime la copie.
+
+Le résultat contient `.action`, `.residuals` et `.violations`. Chaque mesure donne
+`.frame`, `.locked`, `.limb`, `.distance` (unités Blender en espace monde ou `None`),
+`.orientation_error` (radians ou `None`), `.influence`, `.ik`, `.satisfied`
+et `.message`. Les contacts
+d’influence non nulle sont mesurés sur la déformation effective à chaque image
+entière générée et à chaque ancre, y compris les sous-images. Un écart supérieur à
+0,001 unité Blender ou 1° est signalé, même pendant une transition d’influence.
+Un contact invalide est également signalé, même sans influence mesurable.
+Une violation ne modifie pas les ancres, ne déplace pas les accessoires et ne
+déclenche pas de réécriture des canaux. Une plage sans aucun contact actif donne
+un rapport vide, pas une preuve de contact. Les autres sous-images ne sont pas
+contrôlées.
+
+La copie seule ne contient pas la solution IK : il faut la rejouer sur le rig
+avec ses contraintes et cibles présentes. Pour rendre le mouvement autonome
+en GLB, l’export doit échantillonner la pose évaluée (pas les canaux des
+contrôleurs bruts).
+
 ## Interface locale
 
 `addon/animation/cpu.py` définit `Backend.generate(Request) -> tuple[Pose, ...]` sans import Blender. Les ancres contiennent des valeurs scalaires et des rotations WXYZ, ordonnées par l’adaptateur Blender. Le moteur retourne seulement des propositions aux images entières non verrouillées ; l’adaptateur garde la maîtrise des ancres, de la conversion des canaux et de l’écriture. Ce contrat Python n’est pas encore un format d’échange externe.

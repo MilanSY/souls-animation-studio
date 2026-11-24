@@ -218,9 +218,21 @@ def generate_inbetweens(context, rig, start, end, mode, keyframes=None):
     The earliest/latest requested source keys bound the generated interval.
     Every original key time inside it remains locked, even when unselected.
     """
+    del context  # the action can be edited without changing the scene or evaluating the view layer
+    return _generate_inbetweens(rig, start, end, mode, keyframes).action
+
+
+@dataclass(frozen=True)
+class _Generation:
+    action: object
+    slot: object
+    locked: tuple[float, ...]
+    generated: tuple[float, ...]
+
+
+def _generate_inbetweens(rig, start, end, mode, keyframes):
     import bpy
 
-    del context  # the action can be edited without changing the scene or evaluating the view layer
     start, end = _bounds(start, end)
     mode = normalize_mode(mode)
     action, slot, bag = _source(rig)
@@ -295,4 +307,4 @@ def generate_inbetweens(context, rig, start, end, mode, keyframes=None):
     except Exception:
         bpy.data.actions.remove(new)
         raise
-    return new
+    return _Generation(new, copy_slot, tuple(locked), tuple(pose.frame for pose in samples))

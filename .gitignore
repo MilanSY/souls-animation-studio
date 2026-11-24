@@ -9,6 +9,7 @@ __pycache__/
 /dist/*
 !/dist/.gitkeep
 !/dist/souls_animation_studio-0.2.0.zip
+!/dist/souls_animation_studio-0.3.0.zip
 *.ckpt
 *.pt
 *.pth

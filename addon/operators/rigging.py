@@ -145,7 +145,7 @@ class SAS_OT_validate_rig(StudioOperator, bpy.types.Operator):
 class SAS_OT_reset_pose(RiggingMutation, bpy.types.Operator):
     bl_idname = "sas.reset_pose"
     bl_label = "Reset Pose"
-    bl_description = "Reset the control rig's pose transforms"
+    bl_description = "Reset the entire rig's pose transforms and Rigify settings, without deleting keys"
     modes = {"OBJECT", "POSE"}
     requires = ("rig",)
     service = (rigging, "reset_pose")

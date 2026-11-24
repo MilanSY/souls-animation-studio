@@ -2,8 +2,8 @@
 """Check the reference GLB's CPU-computed skin against the Blender demo.
 
 Run with Blender on demo/sas-humanoid.blend from the repository root. This
-assumes the demo's one mesh at identity, full non-sparse float animation
-accessors, and the 24 fps/37 frame clip; it is not a generic GLB loader.
+assumes a single demo skin at identity, full non-sparse float animation
+accessors and an export covering the scene range; it is not a generic GLB loader.
 """
 
 import json
@@ -80,9 +80,14 @@ def main():
     if max(distance for _, distance in nearest_and_distance) > 1e-5:
         raise RuntimeError("Exported positions differ from the source rest mesh")
 
-    for frame in (1, 7, 13, 20, 25, 31, 37):
+    is_original = Path(bpy.data.filepath).stem == "sas-humanoid"
+    sampled = (1, 7, 13, 20, 25, 31, 37) if is_original else (
+        scene.frame_start, *((scene.frame_start + i * (scene.frame_end - scene.frame_start) // 4)
+                             for i in range(1, 4)), scene.frame_end
+    )
+    for frame in sampled:
         scene.frame_set(frame)
-        time = (frame - 1) / 24
+        time = (frame - scene.frame_start) * scene.render.fps_base / scene.render.fps
         nodes = [dict(item) for item in doc["nodes"]]
         for index, path, times, values in channels:
             closest = min(range(len(times)), key=lambda i: abs(times[i][0] - time))
@@ -103,7 +108,7 @@ def main():
             errors.append((result - _to_gltf(evaluated.matrix_world @ source.co)).length)
         max_error = max(errors)
         print(f"Frame {frame:02d}: maximum {max_error:.6f} m, mean {sum(errors) / len(errors):.6f} m")
-        limit = 0.0001 if frame in (1, 37) else 0.015
+        limit = 0.0001 if is_original and frame in (1, 37) else 0.015
         if max_error > limit:
             raise RuntimeError(f"Skin mismatch at frame {frame}: {max_error:.4f} m (limit {limit} m)")
 

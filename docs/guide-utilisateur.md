@@ -1,4 +1,6 @@
-# Guide — Souls Animation Studio 0.2.0
+# Quick Rigging, interpolation CPU et export GLB
+
+Les étapes ci-dessous restent valables en 0.3.0. Voir aussi le [guide de l’éditeur de poses, des contacts et de la bibliothèque](pose-editor.md).
 
 ## Quick Rigging
 
