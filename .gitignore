@@ -1,15 +1,32 @@
+# Python : caches et rapports locaux
 __pycache__/
 *.py[cod]
 .pytest_cache/
 .ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Environnements et secrets locaux
 .venv*/
 .env
 .env.*
+!.env.example
+
+# Copies de sauvegarde Blender et cache d’import Godot
 *.blend1
+*.blend[2-9]
+*.blend[0-9][0-9]*
+.godot/
+
+# ZIP générés ; conserver les versions livrées
 /dist/*
 !/dist/.gitkeep
 !/dist/souls_animation_studio-0.2.0.zip
 !/dist/souls_animation_studio-0.3.0.zip
+
+# Poids de modèles locaux
 *.ckpt
 *.pt
 *.pth
