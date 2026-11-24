@@ -12,6 +12,7 @@ Extension Blender libre et hors ligne : **Quick Rigging** pour humanoïdes en A-
 - [Procédure de validation visuelle](docs/validation-visuelle.md)
 - [Rapport Sprint 1](docs/sprint-1.md)
 - [Architecture et licences](docs/architecture.md)
+- [Permissions OpenCode du projet](docs/opencode.md)
 
 ## Développer et tester
 

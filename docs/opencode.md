@@ -1,0 +1,9 @@
+# OpenCode 2.4.1 — autonomie locale
+
+`.opencode/opencode.jsonc` et les cinq profils de `.opencode/agents/` utilisent la règle V2 `permissions: [{ "action": "*", "resource": "*", "effect": "allow" }]`. Elle remplace les confirmations et refus du dépôt, ainsi que les anciennes listes de fichiers et de délégataires par agent. Les rôles sont inchangés : `addon-director` reste principal et les quatre spécialistes restent des sous-agents. `experimental.subagent_depth: 2` permet à un spécialiste de lancer un sous-agent à son tour.
+
+Cette règle autorise, sans confirmation **propre au dépôt**, les lectures et écritures, les commandes shell (dont Git, Python, Blender headless, installations en venv et téléchargements), les recherches web, les outils MCP disponibles, la délégation et les accès externes nécessaires aux tests. Elle n’installe ni ne connecte de serveur MCP et ne supplante pas les restrictions imposées par le runtime ou une politique gérée. En particulier, OpenCode 2.4.1 affiche encore un refus pour l’action et le skill `browser` avec un profil utilisateur vierge. Ce refus ne vise pas `websearch` ou `webfetch`.
+
+**Ce n’est pas un bac à sable.** Le shell dispose des droits du compte système qui l’exécute. Les agents doivent suivre [`AGENTS.md`](../AGENTS.md) : spécialités, coordination des fichiers, répertoires de test isolés, aucun `sudo`, aucune modification du système, du projet Godot principal ou de la configuration globale, aucun accès aux données personnelles ni `git push` sans demande explicite.
+
+Depuis la racine du projet, `opencode --version`, `opencode debug config --standalone` et `opencode debug agents --standalone` permettent de vérifier le chargement. Aucun redémarrage n’est nécessaire : OpenCode recharge les changements. Utiliser `/reload` si la session ouverte affiche encore les anciens profils.

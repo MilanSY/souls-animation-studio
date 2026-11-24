@@ -2,12 +2,9 @@
   "$schema": "https://opencode.ai/config.json",
   "default_agent": "addon-director",
   "permissions": [
-    { "action": "external_directory", "resource": "*", "effect": "deny" },
-    { "action": "shell", "resource": "*", "effect": "ask" },
-    { "action": "shell", "resource": "git status *", "effect": "allow" },
-    { "action": "shell", "resource": "git diff *", "effect": "allow" },
-    { "action": "shell", "resource": "git push *", "effect": "deny" },
-    { "action": "blender_*", "resource": "*", "effect": "deny" },
-    { "action": "rea_*", "resource": "*", "effect": "deny" }
-  ]
+    { "action": "*", "resource": "*", "effect": "allow" }
+  ],
+  "experimental": {
+    "subagent_depth": 2
+  }
 }
