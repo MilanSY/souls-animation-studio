@@ -1,31 +1,37 @@
-# Souls Animation Studio
+# Souls Animation Studio 0.2.0
 
-Extension Blender libre, indépendante de tout projet Godot, inspirée de Quick Rigging et d’AI Inbetweening dans Cascadeur. Le **Sprint 0** fournit un panneau et des diagnostics locaux. Le rigging, l’export et la génération d’animations ne sont pas encore implémentés. Le ZIP ne contient ni modèle ni dépendance IA et ne nécessite ni réseau, ni compte, ni abonnement.
+Extension Blender libre et hors ligne : **Quick Rigging** pour humanoïdes en A-pose, skinning automatique, **CPU Inbetweening** et export GLB expérimental vers Godot. L’ajustement est géométrique et l’interpolation est numérique : aucune fonctionnalité IA, aucun poids, aucun téléchargement au démarrage.
 
-## Installer
+## Installer et essayer
 
-1. Récupérer [`dist/souls_animation_studio-0.1.0.zip`](dist/souls_animation_studio-0.1.0.zip) ou le générer ci-dessous si le dépôt vient d’être cloné.
-2. Dans Blender, ouvrir **Édition → Préférences → Obtenir des extensions**, puis choisir **Installer depuis le disque** dans le menu et sélectionner le ZIP. Vérifier que **Souls Animation Studio** est activée dans **Add-ons**.
-3. Dans la vue 3D, appuyer sur `N` et ouvrir **Souls Animation Studio**. Le panneau affiche les deux sections prévues et les diagnostics de l’instance Blender, dont le moteur graphique et le rendu GPU en mode interactif. Ces informations ne constituent pas une vérification de compatibilité IA.
+1. Dans Blender **5.2.2 LTS**, ouvrir **Édition → Préférences → Obtenir des extensions → Installer depuis le disque**, et choisir [`dist/souls_animation_studio-0.2.0.zip`](dist/souls_animation_studio-0.2.0.zip). Le ZIP se reconstruit avec `bash scripts/build_extension.sh`.
+2. Dans la vue 3D, appuyer sur `N` et ouvrir **Souls Animation Studio**. Pour générer un rig, **Rigify** doit être disponible sous le module local `rigify` (c’est le cas du paquet Blender Arch testé). L’extension n’installe rien.
+3. Ouvrir [`demo/sas-humanoid.blend`](demo/sas-humanoid.blend), puis lire l’animation de 1 à 37. [`demo/sas-humanoid.glb`](demo/sas-humanoid.glb) contient le même exemple cuit sur les os de déformation.
 
-Minimum déclaré : Blender **4.2.0**. Sprint 0 testé sous **5.2.2 LTS** uniquement.
+- [Guide utilisateur](docs/guide-utilisateur.md)
+- [Procédure de validation visuelle](docs/validation-visuelle.md)
+- [Rapport Sprint 1](docs/sprint-1.md)
+- [Architecture et licences](docs/architecture.md)
 
 ## Développer et tester
 
-Depuis la racine du dépôt, avec Bash, Blender et Python système 3.11+ :
+Depuis la racine, avec Bash, Blender et Python système 3.11+ :
 
 ```sh
 bash scripts/build_extension.sh
 bash scripts/test_headless.sh
 ```
 
-`BLENDER_BIN=/chemin/vers/blender` permet de choisir un autre binaire. `TMPDIR` permet de choisir l’emplacement des profils temporaires. Le script de test valide le ZIP, l’installe hors ligne dans un profil jetable, puis relance Blender pour tester l’extension installée, pas le code source. Pour tester un ZIP spécifique : `bash scripts/test_headless.sh /chemin/vers/extension.zip`. Les ZIP de `dist/` ne sont pas suivis dans Git.
+Les tests installent le ZIP hors ligne dans un profil jetable. `BLENDER_BIN` permet de choisir le binaire et `TMPDIR` le répertoire temporaire. Pour tester un autre ZIP : `bash scripts/test_headless.sh /chemin/extension.zip`.
 
-Les cinq agents OpenCode sont définis dans `.opencode/agents/`. Dans une **nouvelle session** ouverte depuis ce dépôt, `addon-director` est l’agent principal par défaut. Voir `opencode debug agents` pour contrôler les profils chargés. Les permissions s’appliquent au projet ; elles ne remplacent pas un bac à sable système (notamment lorsqu’on autorise une commande shell).
+Pour régénérer les deux artefacts de démonstration sans modifier les préférences utilisateur :
 
-- [Architecture et frontières](docs/architecture.md)
-- [Étude de Rigify, UniRig, CondMDI et MDM](docs/etude-backends.md)
-- [Environnement, validation et plan du sprint suivant](docs/sprint-0.md)
-- [Instructions pour les agents](AGENTS.md)
+```sh
+profile=$(mktemp -d)
+BLENDER_USER_RESOURCES="$profile" blender --background --factory-startup \
+  --offline-mode --disable-autoexec --python-exit-code 1 \
+  --python scripts/build_demo.py -- "$PWD/demo"
+rm -rf -- "$profile"
+```
 
-Licence : [GPL-3.0-or-later](LICENSE). Les futurs moteurs, poids et jeux de données conserveront leurs propres conditions.
+Licence du projet et du personnage synthétique : [GPL-3.0-or-later](LICENSE). Les fichiers Python de Rigify, les moteurs externes et les poids ne sont pas distribués dans le ZIP.

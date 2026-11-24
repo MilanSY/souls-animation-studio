@@ -27,12 +27,20 @@ if [[ ! -f "$archive" ]]; then
     printf 'ZIP introuvable : %s (lancer bash scripts/build_extension.sh)\n' "$archive" >&2
     exit 2
 fi
+if [[ -n "${SOULS_TEST_GLB:-}" && ( -d "$SOULS_TEST_GLB" || -d "$SOULS_TEST_GLB.json" ) ]]; then
+    printf 'SOULS_TEST_GLB doit pointer vers un fichier, pas un répertoire.\n' >&2
+    exit 2
+fi
 
-scratch="$(mktemp -d "${TMPDIR:-/tmp}/souls-test.XXXXXXXX")"
+scratch="$(mktemp -d "${TMPDIR:-/tmp}/opencode/souls-test.XXXXXXXX" 2>/dev/null ||
+    mktemp -d "${TMPDIR:-/tmp}/souls-test.XXXXXXXX")"
 trap 'rm -rf -- "$scratch"' EXIT
+# These override BLENDER_USER_RESOURCES when set in the caller's environment.
+unset BLENDER_USER_CONFIG BLENDER_USER_SCRIPTS BLENDER_USER_EXTENSIONS BLENDER_USER_DATAFILES
 export BLENDER_USER_RESOURCES="$scratch/profile"
 mkdir -p -- "$BLENDER_USER_RESOURCES"
 
+printf 'ZIP testé : %s\n' "$archive"
 "$blender" --background --factory-startup --offline-mode --command extension \
     validate "$archive"
 "$blender" --background --factory-startup --offline-mode --command extension \
@@ -40,3 +48,12 @@ mkdir -p -- "$BLENDER_USER_RESOURCES"
 # Load the isolated preferences saved by the real install in a fresh process.
 "$blender" --background --offline-mode --python-exit-code 1 \
     --python "$root/tests/headless_smoke.py" -- "$archive"
+"$blender" --background --offline-mode --python-exit-code 1 \
+    --python "$root/tests/headless_workflow.py" -- "$scratch/reference.glb"
+
+# Optionally keep the exact GLB that passed, for a separate Godot import probe.
+if [[ -n "${SOULS_TEST_GLB:-}" ]]; then
+    cp -T -- "$scratch/reference.glb" "$SOULS_TEST_GLB"
+    cp -T -- "$scratch/reference.glb.json" "$SOULS_TEST_GLB.json"
+    printf 'GLB et dimensions de référence : %s[.json]\n' "$SOULS_TEST_GLB"
+fi

@@ -8,5 +8,5 @@ class SOULS_AP_preferences(bpy.types.AddonPreferences):
     bl_idname = __package__
 
     def draw(self, context):
-        self.layout.label(text="Sprint 0: no external backend or model configured.")
+        self.layout.label(text="Local geometric rigging and CPU inbetweening; no AI backend.")
         self.layout.label(text="See the Souls Animation Studio tab in the 3D View.")

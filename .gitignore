@@ -8,6 +8,7 @@ __pycache__/
 *.blend1
 /dist/*
 !/dist/.gitkeep
+!/dist/souls_animation_studio-0.2.0.zip
 *.ckpt
 *.pt
 *.pth

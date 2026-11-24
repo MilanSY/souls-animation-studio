@@ -7,12 +7,15 @@
 | `addon/ui/`, `preferences.py` | Affichage, préférences, état des actions. Aucun traitement des poses ou du maillage. |
 | `addon/operators/` | Validation du contexte Blender, orchestration des opérations, erreurs et annulation. |
 | `addon/rigging/` | Squelette de déformation, skinning et contrôles ; aucune dépendance à l’interface. |
-| `addon/animation/` | Lecture des poses, retargeting, contacts, validation et application en action Blender. |
+| `addon/animation/cpu.py` | Types de données et backend CPU pur Python : scalaires, quaternions, échantillons. |
+| `addon/animation/blender.py` | Lecture des poses de l’Action et du slot actif, copie et écriture des courbes Blender. |
 | `addon/exporters/` | Export du squelette de déformation et des canaux d’animation cuits, sans importer les contrôleurs dans Godot. |
 
-Au Sprint 0, seuls l’enregistrement, le panneau, les préférences et les diagnostics sont actifs. Les autres modules sont réservés. `tests/`, `docs/`, `scripts/` et `backends/` ne font pas partie du ZIP.
+Rigify est appelé à la demande depuis la couche rigging. Le skinning calcule des poids sur une copie de travail ; seuls les groupes DEF contrôlés et le modificateur sont appliqués au maillage choisi. L’export construit une armature et une peau jetables, puis les nettoie et restaure mode, sélection et image. `tests/`, `docs/`, `scripts/`, `demo/` et `backends/` ne font pas partie du ZIP.
 
-## Moteurs remplaçables — conception, pas une API implémentée
+## Moteurs remplaçables
+
+Le backend CPU reçoit des poses numériques et renvoie des échantillons ; il ne reçoit ni objets Blender, ni paramètres d’UI, ni chemins de projet. Voir [`backends/inbetweening`](../backends/inbetweening/README.md). CondMDI, UniRig, les contacts et le retargeting ne sont pas intégrés ; une future intégration devra adapter ses données au squelette et définir ses propres entrées.
 
 Un futur opérateur délèguera à un client léger, sans importer de bibliothèques ML dans Blender. Chaque adaptateur de `backends/` lancera un moteur local dans son propre environnement Python, avec un exécutable choisi explicitement. Pas de service distant ni de téléchargement automatique.
 
@@ -21,3 +24,9 @@ Le contrat à prototyper est une CLI locale et des entrées/sorties de fichiers 
 - **Rigging** : conversion du résultat vers une hiérarchie humanoïde stable ; séparation entre os de déformation et contrôleurs. Vérifier indices, topologie et poids normalisés.
 - **Animation** : reconstruire les poses sur le rig cible ; conserver les valeurs originales aux images clés et limiter la correction des contacts aux images non verrouillées. Signaler les conflits insolubles, par exemple un pied à la fois verrouillé hors sol et déclaré en contact. Tester pied-sol et main-accessoire séparément.
 - **Export** : tester un GLB/glTF et son squelette de déformation sur un projet Godot de test, jamais dans le jeu de l’utilisateur.
+
+## Provenance et licences
+
+- L’extension, la topologie de référence, les poses de démonstration et les scripts/fixtures écrits ici sont fournis sous [GPL-3.0-or-later](../LICENSE). `scripts/reference_character.py` et `scripts/build_demo.py` sont les sources de génération des données de démonstration.
+- Le `.blend` contient des données générées par **Rigify 0.6.10**, © Blender Foundation et contributeurs, **GPL-2.0-or-later** ([sources Blender](https://projects.blender.org/blender/blender), build `d13f752e3b9c`, `scripts/addons_core/rigify`). Le fichier contient les armatures, contraintes, pilotes et widgets générés, mais pas le code Python du panneau Rigify. Les composants d’origine compatibles GPL qui se reflètent dans ces données sont distribués ici sous GPL-3.0-or-later. Rigify lui-même n’est pas dans le ZIP. **glTF-Blender-IO** (Apache-2.0) est appelé via Blender, sans copie de code.
+- Aucun poids, ensemble de données, maillage importé, texture tierce ni binaire Blender/Godot n’est redistribué.
