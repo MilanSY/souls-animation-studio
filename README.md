@@ -9,6 +9,7 @@ Extension Blender libre : **Quick Rigging T/A sur CPU**, édition de poses Rigif
 3. Ouvrir le [banc de skinning](demo/sprint3-skinning.blend) et ses [comparaisons CPU](demo/sprint3-skinning-README.md), ou la [démo accessoire](demo/sprint3-accessory.blend) et ses GLB [combiné](demo/sprint3-accessory-combined.glb) / [séparé](demo/sprint3-accessory-separate.glb). Les démos [Sprint 1](demo/sas-humanoid.blend) et [Sprint 2](demo/sas-combat.blend) restent disponibles.
 
 - [Guide utilisateur](docs/guide-utilisateur.md)
+- [Motion Preview : build de développement, démo et validation](docs/side-task-01-motion-preview.md)
 - [Sprint 4 : utiliser et évaluer le modèle neuronal](docs/sprint-4.md) · [Démonstration Blender et GLB](demo/sprint4-planar-README.md)
 - [Sprint 5A : rapport et recette du build de développement](docs/sprint-5a.md) · [Plan d’inférence 5B](docs/sprint-5b-plan.md)
 - [Recette interactive et rapport Sprint 3](docs/sprint-3.md)
@@ -31,7 +32,7 @@ bash scripts/test_headless.sh
 SOULS_TEST_GODOT=1 bash scripts/test_headless.sh
 ```
 
-Le script construit `dist/souls_animation_studio-0.5.0-dev-sprint-5a.zip` sans remplacer le ZIP public. Les tests installent le build de développement hors ligne dans un profil jetable. `BLENDER_BIN` permet de choisir le binaire et `TMPDIR` le répertoire temporaire. Pour tester un autre ZIP : `bash scripts/test_headless.sh /chemin/extension.zip`.
+Sur cette branche, le script construit `dist/souls_animation_studio-0.5.0-dev-motion-preview.zip` sans remplacer le ZIP public. Les tests installent le build de développement hors ligne dans un profil jetable. `BLENDER_BIN` permet de choisir le binaire et `TMPDIR` le répertoire temporaire. Pour tester un autre ZIP : `bash scripts/test_headless.sh /chemin/extension.zip`.
 
 Pour régénérer les deux artefacts de démonstration sans modifier les préférences utilisateur :
 

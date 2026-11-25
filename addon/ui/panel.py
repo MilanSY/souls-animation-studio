@@ -5,6 +5,7 @@ import bpy
 
 from .. import animation
 from ..diagnostics import environment_rows
+from ..motion_preview import runtime as preview_runtime
 from ..operators.ai_inbetween import draw_motion_controls
 from ..operators.contacts import contacts
 from ..operators.pose_editor import widget_for
@@ -89,6 +90,63 @@ class StudioSection:
     bl_region_type = "UI"
     bl_category = "Souls Animation Studio"
     bl_options = {"DEFAULT_CLOSED"}
+
+
+class SOULS_PT_motion_preview(StudioSection, bpy.types.Panel):
+    bl_label = "Motion Preview"
+
+    def draw(self, context):
+        layout = self.layout
+        settings = context.scene.sas_motion_preview
+        rig = preview_runtime.rig_for(context)
+        if rig is None:
+            layout.label(text="Activate an armature in Object or Pose Mode.", icon="INFO")
+        else:
+            layout.label(text=rig.name, icon="ARMATURE_DATA", translate=False)
+        layout.prop(settings, "ghost_enabled")
+        if settings.ghost_enabled:
+            box = layout.box()
+            box.label(text="Mode: Skeleton", icon="ARMATURE_DATA")
+            row = box.row(align=True)
+            row.prop(settings, "ghost_past")
+            row.prop(settings, "ghost_future")
+            box.prop(settings, "ghost_keys_only")
+            row = box.row()
+            row.enabled = not settings.ghost_keys_only
+            row.prop(settings, "ghost_step")
+            if settings.ghost_keys_only:
+                box.label(text="Frame Step is ignored in Keys Only mode.")
+            box.prop(settings, "ghost_past_color")
+            box.prop(settings, "ghost_future_color")
+            box.prop(settings, "ghost_opacity", slider=True)
+            box.prop(settings, "ghost_falloff", slider=True)
+        layout.prop(settings, "trail_enabled")
+        if settings.trail_enabled:
+            box = layout.box()
+            box.prop(settings, "target")
+            _range(box, settings, "trail_start", "trail_end")
+            box.prop(settings, "trail_step")
+            box.prop(settings, "trail_past_color")
+            box.prop(settings, "trail_future_color")
+            box.prop(settings, "show_markers")
+            box.prop(settings, "show_keyframes")
+            box.prop(settings, "show_direction")
+            box.prop(settings, "show_labels")
+        enabled = settings.ghost_enabled or settings.trail_enabled
+        if enabled:
+            layout.prop(settings, "show_frame_numbers")
+            if not context.space_data.overlay.show_overlays:
+                layout.label(text="Enable Viewport Overlays to show the preview.", icon="INFO")
+            message = preview_runtime.status(context)
+            if message and rig is not None:
+                layout.label(text=message, icon="INFO", translate=False)
+        row = layout.row(align=True)
+        rebuild = row.row(align=True)
+        rebuild.enabled = enabled and rig is not None
+        rebuild.operator("sas.refresh_motion_preview", text="Refresh", icon="FILE_REFRESH")
+        clear = row.row(align=True)
+        clear.enabled = enabled
+        clear.operator("sas.clear_motion_preview", text="Clear", icon="X")
 
 
 class SOULS_PT_contacts(StudioSection, bpy.types.Panel):
@@ -308,7 +366,7 @@ class SOULS_PT_diagnostics(StudioSection, bpy.types.Panel):
         layout = self.layout
         for name, value in environment_rows():
             layout.label(text=f"{name}: {value}")
-        layout.label(text="Ghost preview: unavailable.")
+        layout.label(text="Motion Preview: skeletal GPU overlay.")
         layout.label(text="Balance analysis: unavailable.")
         if contacts is not None:
             layout.operator("sas.contact_residuals")
@@ -349,6 +407,6 @@ class SOULS_PT_quick_rig(StudioSection, bpy.types.Panel):
 
 CLASSES = (
     SOULS_MT_poses, SOULS_MT_blend_poses,
-    SOULS_PT_studio, SOULS_PT_contacts, SOULS_PT_weapon, SOULS_PT_poses,
+    SOULS_PT_studio, SOULS_PT_motion_preview, SOULS_PT_contacts, SOULS_PT_weapon, SOULS_PT_poses,
     SOULS_PT_cpu, SOULS_PT_ai, SOULS_PT_ai_rigging, SOULS_PT_export, SOULS_PT_diagnostics, SOULS_PT_quick_rig,
 )

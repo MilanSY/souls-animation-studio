@@ -21,6 +21,7 @@ PANELS = {
     "SOULS_PT_contacts": ("Contacts", {"sas.lock_contact"}),
     "SOULS_PT_weapon": ("Weapon Setup", {"sas.setup_weapon", "sas.clear_weapon"}),
     "SOULS_PT_poses": ("Pose Library", set()),
+    "SOULS_PT_motion_preview": ("Motion Preview", {"sas.refresh_motion_preview", "sas.clear_motion_preview"}),
     "SOULS_PT_cpu": ("CPU Inbetweening", {"sas.generate_inbetweens", "sas.generate_contact_inbetweens"}),
     "SOULS_PT_ai": ("AI Inbetweening — Experimental", {"sas.ai_inbetween"}),
     "SOULS_PT_ai_rigging": ("AI Rigging — Experimental", {"sas.experimental_unirig", "sas.prepare_smartpose_bridge"}),
@@ -185,7 +186,7 @@ class ExtensionSmokeTests(unittest.TestCase):
         self.assertIn("Planar three-bone rigs only; not Rigify.", draws["SOULS_PT_ai"])
         self.assertFalse(bpy.ops.sas.ai_inbetween.poll())
         self.assertFalse(bpy.ops.sas.experimental_unirig.poll())
-        self.assertIn("Ghost preview: unavailable.", diagnostics)
+        self.assertIn("Motion Preview: skeletal GPU overlay.", diagnostics)
         # The prior full-pose reset remains reachable from Quick Rigging.
         bpy.ops.sas.reset_pose.get_rna_type()
 

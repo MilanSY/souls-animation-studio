@@ -17,7 +17,7 @@ cp -- "$root/LICENSE" "$scratch/addon/LICENSE"
 archive="$(python3 -c '
 import sys, tomllib
 with open(sys.argv[1], "rb") as stream:
-    print("{id}-{version}-dev-sprint-5a.zip".format_map(tomllib.load(stream)))
+    print("{id}-{version}-dev-motion-preview.zip".format_map(tomllib.load(stream)))
 ' "$scratch/addon/blender_manifest.toml")"
 "$blender" --background --factory-startup --offline-mode --command extension \
     validate "$scratch/addon"

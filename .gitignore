@@ -25,6 +25,7 @@ htmlcov/
 !/dist/.gitkeep
 !/dist/souls_animation_studio-0.2.0.zip
 !/dist/souls_animation_studio-0.3.0.zip
+!/dist/souls_animation_studio-0.5.0-dev-motion-preview.zip
 
 # Poids de modèles locaux
 *.ckpt

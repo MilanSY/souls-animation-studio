@@ -26,6 +26,16 @@ Créer ou sélectionner une **Action** active sur le Control Rig, avec au moins 
 
 **Generate Inbetweens** crée une Action distincte. La sélectionner dans l’**Éditeur d’actions** pour l’essayer ; la source reste active tant qu’on ne change pas d’action. Les rotations de pose compatibles sont interpolées dans l’espace quaternion sur l’arc court, même lorsque leur stockage est Euler. L’interpolation est échantillonnée aux images entières ; les sous-images intermédiaires restent soumises aux courbes Blender. Les canaux discrets, verrouillés, muets ou pilotés ne sont pas réécrits. L’outil ne résout pas les collisions, n’impose pas d’appui au sol et ne traite pas la pile NLA.
 
+## Motion Preview (build de développement)
+
+Installer le [ZIP Motion Preview](../dist/souls_animation_studio-0.5.0-dev-motion-preview.zip), puis ouvrir **Vue 3D → N → Souls Animation Studio → Motion Preview** avec les overlays actifs. Sélectionner l’armature en mode Objet ou Pose et vérifier le nom du rig affiché. L’aperçu est suspendu pendant la lecture et le rendu ; arrêter la lecture pour inspecter une image.
+
+- **Skeletal Ghosts** : choisir combien de poses afficher de chaque côté avec **Past** et **Future** (0 masque ce côté). **Frame Step** fixe l’écart à partir de l’image courante ; **Keys Only** prend les clés voisines et ignore le pas. Régler les deux couleurs, **Opacity** et **Falloff**. Seul le mode **Skeleton** est disponible.
+- **Trails** : choisir **Root** (racine et bassin s’ils sont reconnus), **Hands**, **Feet**, **Head**, **Accessories** ou **Selected Bones** (sélection en mode Pose). Régler **Start / End** et **Step**. **Keyframes** ajoute des repères sur les clés, même hors pas si le budget le permet ; **Direction** ajoute des flèches. **Frame Numbers** affiche les images des ghosts et une sélection de numéros sur les trails. Le bleu indique le passé, l’orange le futur par défaut.
+- **Refresh** reconstruit le cache. **Clear Preview** coupe les deux couches dans la scène courante sans perdre les couleurs, la cible ni la plage. Seuls les réglages sont enregistrés dans le `.blend` ; aucun trait ni objet d’aperçu n’est exporté.
+
+Pour comparer deux Actions CPU ou IA déjà présentes, activer l’une puis l’autre dans l’Éditeur d’actions et garder la même cible, les mêmes images et le même point de vue. Motion Preview affiche l’animation évaluée active, pas deux Actions superposées. Voir la [recette sur la démo de combat et les limites](side-task-01-motion-preview.md).
+
 ## GLB expérimental
 
 1. Vérifier le binding. Sélectionner le clip voulu comme action active et régler la plage inclusive **Start / End**. Pour exporter la pose courante sur un seul échantillon, donner deux bornes égales à son image.

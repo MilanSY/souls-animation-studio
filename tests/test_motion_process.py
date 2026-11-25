@@ -326,7 +326,7 @@ Path('response.json').write_bytes({SUCCESS_RESPONSE!r})
             try:
                 # Remainder after comm (which can have spaces/parentheses).
                 return Path(f'/proc/{pid}/stat').read_text().rsplit(')', 1)[1].split()[0] in {'X', 'Z'}
-            except FileNotFoundError:
+            except (FileNotFoundError, ProcessLookupError):
                 return True
 
         for mode in ('cancel', 'timeout', 'close', 'normal'):
