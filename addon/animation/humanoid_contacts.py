@@ -52,20 +52,32 @@ def _key_coordinates(bag):
                    for curve in bag.fcurves for point in curve.keyframe_points)
 
 
-def qualify_contact_candidate(context, rig, action, slot, *, locked_frames, sample_frames):
+def qualify_contact_candidate(context, rig, action, slot, *, locked_frames, sample_frames, controls):
     """Measure an already populated, unbound action on the source's native stack.
 
     The rig must still have its authoritative source action and slot bound.
     ``action`` must be a detached copy with the corresponding ``slot`` and
-    complete, already baked integer samples. This function borrows the copy:
+    complete, already baked integer samples. ``controls`` lists the explicitly
+    permitted Rigify controls; only their location and rotation may gain keys.
+    This function borrows the copy:
     the caller owns it on success *and* failure, and must discard a failed copy
     rather than publish it. No action datablock or F-Curve is created, copied,
     edited, or removed here; the transient binding and playhead are restored.
     This gate does not validate external JSON or stale job provenance.
     """
-    from ..contacts import contact_residuals
+    from ..contacts import contact_residuals, contact_states
 
     _rig(context, rig)
+    if not isinstance(controls, (tuple, list)) or not controls or any(type(name) is not str for name in controls):
+        raise ValueError("Une liste explicite de contrôleurs Rigify est requise.")
+    allowed = {}
+    for name in controls:
+        bone = rig.pose.bones.get(name)
+        if bone is None or bone.bone.use_deform or name.startswith(("DEF-", "MCH-", "ORG-")):
+            raise ValueError(f"{name} : contrôleur Rigify non éditable par la copie.")
+        for prop, count in (("location", 3), ("rotation_euler", 3), ("rotation_quaternion", 4),
+                            ("rotation_axis_angle", 4)):
+            allowed[bone.path_from_id(prop)] = count
     source, source_slot, source_bag = _source(rig)
     if (not isinstance(action, bpy.types.Action) or action == source
             or action.users != int(action.use_fake_user)):
@@ -96,9 +108,22 @@ def qualify_contact_candidate(context, rig, action, slot, *, locked_frames, samp
     original, baked, free = _key_coordinates(source_bag), _key_coordinates(bag), set(generated)
     if original - baked or any(frame not in free for _, _, frame, _ in baked - original):
         raise ValueError("La copie doit préserver les coordonnées des clés source et n’ajouter que les images libres.")
+    if any(not 0 <= index < allowed.get(path, 0) for path, index, _, _ in baked - original):
+        raise ValueError("La copie ajoute une clé hors des canaux de pose autorisés.")
+    existing = {(curve.data_path, curve.array_index) for curve in source_bag.fcurves}
+    for curve in bag.fcurves:
+        path, index = curve.data_path, curve.array_index
+        if (path, index) not in existing and not 0 <= index < allowed.get(path, 0):
+            raise ValueError("La copie ajoute une courbe hors des canaux de pose autorisés.")
+
+    def contact_signature():
+        return {state.contact_id: (state.limb, state.anchor, state.target,
+                                   state.orientation, state.influence, state.valid)
+                for state in contact_states(context, rig) if state.active or not state.valid}
 
     evaluator = _ContactEvaluator(context, rig, contact_residuals)
-    residuals = _solve_contacts(evaluator, source, source_slot, _Generation(action, slot, locked, generated))
+    residuals = _solve_contacts(evaluator, source, source_slot, _Generation(action, slot, locked, generated),
+                                contact_signature=contact_signature)
     _require_contacts(residuals)
     return ContactInbetweenResult(action, residuals)
 

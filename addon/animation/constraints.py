@@ -85,21 +85,26 @@ class _ContactEvaluator:
         )
 
 
-def _solve_contacts(evaluator, action, slot, candidate):
+def _solve_contacts(evaluator, action, slot, candidate, *, contact_signature=None):
     """Let the native constraint stack solve each sample; never rewrite controller channels."""
     locked = set(candidate.locked)
     residuals = []
     with evaluator.restore_state(action, slot):
         for frame in sorted((*candidate.locked, *candidate.generated)):
             is_locked = frame in locked
-            if is_locked:
+            if is_locked or contact_signature is not None:
                 evaluator.bind(action, slot)
                 evaluator.at(frame)
+            if is_locked:
                 source_pose = evaluator.pose_signature()
+            if contact_signature is not None:
+                source_contacts = contact_signature()
             evaluator.bind(candidate.action, candidate.slot)
             evaluator.at(frame)
             if is_locked and evaluator.pose_signature() != source_pose:
                 raise RuntimeError(f"Could not preserve the evaluated locked pose at frame {frame:g}.")
+            if contact_signature is not None and contact_signature() != source_contacts:
+                raise RuntimeError(f"Image {frame:g} : la copie modifie les contacts natifs attendus.")
             residuals.extend(evaluator.residuals(frame, is_locked))
     return tuple(residuals)
 

@@ -188,7 +188,8 @@ class HumanoidContacts(unittest.TestCase):
 
     def qualify(self, action, slot, *, locked_frames=ANCHORS, sample_frames=SAMPLES):
         return self.qualification.qualify_contact_candidate(
-            self.context, self.rig, action, slot, locked_frames=locked_frames, sample_frames=sample_frames)
+            self.context, self.rig, action, slot, locked_frames=locked_frames, sample_frames=sample_frames,
+            controls=tuple(MAPPING.values()))
 
     def verify_candidate(self, result, before, anchors):
         after = self.snapshot()
@@ -355,6 +356,41 @@ class HumanoidContacts(unittest.TestCase):
             self.contacts.lock_contact(self.context, self.external, "FOOT_L")
         self.assertEqual(self.snapshot(), before)
         self.assertNotIn("torch", sys.modules)
+
+    def test_candidate_cannot_hide_native_contact_at_free_frame(self):
+        self.lock("FOOT_L", start=1, end=4)
+        target = self.target("Unreachable free-frame target", 6, "foot_ik.R")
+        state = self.lock("FOOT_R", target=target, orientation=True, start=6, end=6)
+        target.location.x += 2
+        self.at(3.25)
+        candidate, slot = self.external_candidate()
+        before = self.snapshot()
+        with self.assertRaisesRegex(self.qualification.HumanoidContactError, "FOOT_R, image 6"):
+            self.qualify(candidate, slot)
+        self.assertEqual(self.snapshot(), before)
+        # Simulate a dependency whose active-contact set changed only on the
+        # copy, independently of the F-Curve allowlist below.
+        real_states = self.contacts.contact_states
+
+        def hidden_right_contact(context, rig):
+            states = real_states(context, rig)
+            if self.anim.action == candidate and context.scene.frame_current_final == 6:
+                return [row for row in states if row.contact_id != state.contact_id]
+            return states
+
+        with patch.object(self.contacts, "contact_states", side_effect=hidden_right_contact):
+            with self.assertRaisesRegex(RuntimeError, "Image 6 : la copie modifie les contacts"):
+                self.qualify(candidate, slot)
+        self.assertEqual(self.snapshot(), before)
+        curves = candidate.layers[0].strips[0].channelbag(slot).fcurves
+        for constraint in self.rig.pose.bones["foot_ik.R"].constraints:
+            if constraint.target == state.anchor:
+                curve = curves.new(constraint.path_from_id("mute"), index=0)
+                for frame in SAMPLES:
+                    curve.keyframe_points.insert(frame, float(frame == 6)).interpolation = "CONSTANT"
+        with self.assertRaisesRegex(ValueError, "hors des canaux de pose autorisés"):
+            self.qualify(candidate, slot)
+        self.assertEqual(self.snapshot(), before)
 
 
 if __name__ == "__main__":
