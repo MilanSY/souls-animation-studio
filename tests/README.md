@@ -4,12 +4,13 @@
 bash scripts/build_extension.sh
 bash scripts/test_headless.sh
 # Ou pour vérifier un ZIP précis :
-bash scripts/test_headless.sh dist/souls_animation_studio-0.5.0.zip
-bash tests/test_shell_failures.sh dist/souls_animation_studio-0.5.0.zip
+bash scripts/test_headless.sh dist/souls_animation_studio-0.5.0-dev-sprint-5a.zip
+bash tests/test_shell_failures.sh dist/souls_animation_studio-0.5.0-dev-sprint-5a.zip
 ```
 
-Le test utilise un profil Blender temporaire hors ligne et le vrai ZIP installé,
-non le code de l’extension dans le dépôt. Rigify doit être disponible dans la
+Les tests de parcours utilisent un profil Blender temporaire hors ligne et le
+vrai ZIP installé. Certaines suites unitaires testent également les modules
+directement depuis le dépôt, comme les tests CPython. Rigify doit être disponible dans la
 distribution Blender testée (aucun téléchargement). `BLENDER_BIN` permet de
 tester un autre exécutable. Un échec Python ou de `unittest` est remonté au shell.
 La sonde d’échec vérifie ce comportement avec un ZIP corrompu et une assertion
@@ -67,3 +68,5 @@ SAS_MOTION_TEST_PYTHON=/chemin/absolu/venv/bin/python SOULS_TEST_GODOT=1 bash sc
 ```
 
 La preuve compare à la requête issue de la démo, puis refait le bake avec l’adaptateur installé. Les événements modaux sont injectés en headless : pas de recette de la fenêtre Blender.
+
+Les tests du [banc humanoïde et de la correction des raccords](../docs/sprint-5a.md) utilisent des fixtures originales déterministes, sans modèle ni poids. Dans le ZIP, deux tests qualifient le retargeting FK sur les morphologies Sprint 3 et quatre tests vérifient les contacts natifs sur une fixture BVH, dont le rejet d’une copie qui masque un contact. Aucun résultat de ces tests ne prouve une inférence humanoïde. Un ZIP historique ne possède pas ces composants : rejouer sa suite à la révision correspondante.

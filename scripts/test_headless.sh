@@ -20,7 +20,7 @@ from pathlib import Path
 root = Path(sys.argv[1])
 with (root / "addon/blender_manifest.toml").open("rb") as stream:
     manifest = tomllib.load(stream)
-print(root / "dist" / "{id}-{version}.zip".format_map(manifest))
+print(root / "dist" / "{id}-{version}-dev-sprint-5a.zip".format_map(manifest))
 ' "$root")"
 fi
 if [[ ! -f "$archive" ]]; then
@@ -69,10 +69,16 @@ with ZipFile(sys.argv[1]) as archive:
     --python "$root/tests/headless_contacts_sprint3.py" -- "$scratch"
 "$blender" --background --offline-mode --python-exit-code 1 \
     --python "$root/tests/headless_accessories.py" -- "$scratch"
+"$blender" --background --offline-mode --disable-autoexec --python-exit-code 1 \
+    --python "$root/tests/headless_humanoid_retarget.py"
+"$blender" --background --offline-mode --disable-autoexec --python-exit-code 1 \
+    --python "$root/tests/headless_humanoid_contacts.py" -- "$scratch"
 python3 "$root/tests/test_external_backend.py"
 "$blender" --background --offline-mode --python-exit-code 1 \
     --python "$root/tests/test_external_backend.py"
 python3 "$root/backends/inbetweening/test_cpu.py"
+python3 "$root/tests/test_humanoid_bench.py"
+python3 "$root/tests/test_humanoid_continuity.py"
 "$blender" --background --factory-startup --offline-mode --python-exit-code 1 \
     --python "$root/backends/inbetweening/test_blender.py"
 
