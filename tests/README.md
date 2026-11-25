@@ -4,8 +4,8 @@
 bash scripts/build_extension.sh
 bash scripts/test_headless.sh
 # Ou pour vérifier un ZIP précis :
-bash scripts/test_headless.sh dist/souls_animation_studio-0.4.0.zip
-bash tests/test_shell_failures.sh dist/souls_animation_studio-0.4.0.zip
+bash scripts/test_headless.sh dist/souls_animation_studio-0.5.0.zip
+bash tests/test_shell_failures.sh dist/souls_animation_studio-0.5.0.zip
 ```
 
 Le test utilise un profil Blender temporaire hors ligne et le vrai ZIP installé,
@@ -57,3 +57,13 @@ Aucun de ces tests ne valide le rendu, les interactions de la sidebar, la
 qualité visuelle de la déformation, la collision du pied avec une surface, ni
 l’intégration dans le projet du jeu. Le ghost n’est pas implémenté ; le test
 vérifie qu’il est signalé comme indisponible, sans bouton utilisable.
+
+## AI Inbetweening expérimental
+
+Le run standard vérifie l’adaptateur, les erreurs, l’annulation et le retargeting sur fixtures, sans exiger NumPy. Si NumPy est présent, le test de processus exerce aussi le vrai worker avec des poids synthétiques de diagnostic. Ce test ne remplace pas celui du checkpoint entraîné. Pour rendre obligatoire la preuve neuronale avec le checkpoint de démo et l’aller-retour GLB :
+
+```sh
+SAS_MOTION_TEST_PYTHON=/chemin/absolu/venv/bin/python SOULS_TEST_GODOT=1 bash scripts/test_headless.sh
+```
+
+La preuve compare à la requête issue de la démo, puis refait le bake avec l’adaptateur installé. Les événements modaux sont injectés en headless : pas de recette de la fenêtre Blender.

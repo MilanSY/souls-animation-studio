@@ -5,6 +5,7 @@ import bpy
 
 from .. import animation
 from ..diagnostics import environment_rows
+from ..operators.ai_inbetween import draw_motion_controls
 from ..operators.contacts import contacts
 from ..operators.pose_editor import widget_for
 from ..operators.pose_library import poses
@@ -268,10 +269,11 @@ class SOULS_PT_cpu(StudioSection, bpy.types.Panel):
 
 
 class SOULS_PT_ai(StudioSection, bpy.types.Panel):
-    bl_label = "AI Inbetweening — Unavailable"
+    bl_label = "AI Inbetweening — Experimental"
 
     def draw(self, context):
-        self.layout.label(text="No AI motion backend is integrated.", icon="INFO")
+        self.layout.label(text="Planar three-bone rigs only; not Rigify.", icon="INFO")
+        draw_motion_controls(self.layout, context)
 
 
 class SOULS_PT_ai_rigging(StudioSection, bpy.types.Panel):

@@ -1,6 +1,6 @@
 # Quick Rigging, interpolation CPU et export GLB
 
-Le flux de base ci-dessous reste disponible en 0.4.0. Pour les nouveaux repères, les contacts multiphases et les accessoires, suivre la [recette du Sprint 3](sprint-3.md#recette-interactive-à-effectuer). Voir aussi le [guide de l’éditeur de poses et de la bibliothèque](pose-editor.md).
+Le flux de base ci-dessous reste disponible en 0.5.0. Pour les repères, les contacts multiphases et les accessoires, suivre la [recette du Sprint 3](sprint-3.md#recette-interactive-à-effectuer). Pour l’AI Inbetweening expérimental, voir le [guide Sprint 4](sprint-4.md) ; il ne remplace pas l’interpolation CPU sur Rigify. Voir aussi le [guide de l’éditeur de poses et de la bibliothèque](pose-editor.md).
 
 ## Quick Rigging
 

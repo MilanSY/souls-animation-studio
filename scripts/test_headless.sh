@@ -76,6 +76,20 @@ python3 "$root/backends/inbetweening/test_cpu.py"
 "$blender" --background --factory-startup --offline-mode --python-exit-code 1 \
     --python "$root/backends/inbetweening/test_blender.py"
 
+python3 "$root/tests/test_motion_process.py"
+export SAS_MOTION_TEST_MODULE="bl_ext.user_default.$ext_id"
+"$blender" --background --offline-mode --python-exit-code 1 --python "$root/tests/test_motion_process.py"
+motion_args=()
+if [[ -n "${SAS_MOTION_TEST_PYTHON:-}" ]]; then
+    motion_args+=(--proof "$root/demo/sprint4-planar-preuve.json" --python "$SAS_MOTION_TEST_PYTHON"
+        --weights "$root/demo/sprint4-planar.f32" --glb "$scratch/neural-motion.glb")
+    if [[ "${SOULS_TEST_GODOT:-0}" == 1 ]]; then
+        motion_args+=(--godot "${GODOT_BIN:-godot}")
+    fi
+fi
+"$blender" --background --offline-mode --python-exit-code 1 \
+    --python "$root/tests/headless_ai_retarget.py" -- "${motion_args[@]}"
+
 if [[ "${SOULS_TEST_GODOT:-0}" == 1 ]]; then
     bash "$root/tests/test_godot_import.sh" "$scratch/reference.glb"
     bash "$root/tests/test_godot_import.sh" "$scratch/combined.glb" \

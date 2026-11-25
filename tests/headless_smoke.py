@@ -22,7 +22,7 @@ PANELS = {
     "SOULS_PT_weapon": ("Weapon Setup", {"sas.setup_weapon", "sas.clear_weapon"}),
     "SOULS_PT_poses": ("Pose Library", set()),
     "SOULS_PT_cpu": ("CPU Inbetweening", {"sas.generate_inbetweens", "sas.generate_contact_inbetweens"}),
-    "SOULS_PT_ai": ("AI Inbetweening — Unavailable", set()),
+    "SOULS_PT_ai": ("AI Inbetweening — Experimental", {"sas.ai_inbetween"}),
     "SOULS_PT_ai_rigging": ("AI Rigging — Experimental", {"sas.experimental_unirig", "sas.prepare_smartpose_bridge"}),
     "SOULS_PT_export": ("Export", {"sas.export_glb"}),
     "SOULS_PT_diagnostics": ("Diagnostics", {"sas.contact_residuals"}),
@@ -111,7 +111,7 @@ class ExtensionSmokeTests(unittest.TestCase):
             manifest = tomllib.loads(archive.read("blender_manifest.toml").decode())
             self.assertEqual(manifest["id"], MODULE.rsplit(".", 1)[-1])
             version = manifest["version"]
-            self.assertEqual(version, "0.4.0")
+            self.assertEqual(version, "0.5.0")
             self.assertLessEqual(tuple(map(int, manifest["blender_version_min"].split("."))),
                                  bpy.app.version)
             print(f"Extension: {version}; Blender: {bpy.app.version_string}; "
@@ -181,8 +181,9 @@ class ExtensionSmokeTests(unittest.TestCase):
         self.assertIn(f"Python: {'.'.join(map(str, sys.version_info[:3]))}", diagnostics)
         self.assertIn("Mode: Headless", diagnostics)
         self.assertIn("Viewport GPU: Not queried in headless mode", diagnostics)
-        self.assertIn("AI backends: UniRig experimental; no AI motion backend", diagnostics)
-        self.assertIn("No AI motion backend is integrated.", draws["SOULS_PT_ai"])
+        self.assertIn("AI backends: UniRig (CUDA) and planar MLP (CPU), experimental", diagnostics)
+        self.assertIn("Planar three-bone rigs only; not Rigify.", draws["SOULS_PT_ai"])
+        self.assertFalse(bpy.ops.sas.ai_inbetween.poll())
         self.assertFalse(bpy.ops.sas.experimental_unirig.poll())
         self.assertIn("Ghost preview: unavailable.", diagnostics)
         # The prior full-pose reset remains reachable from Quick Rigging.

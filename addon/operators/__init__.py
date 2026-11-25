@@ -2,6 +2,7 @@
 """Blender operator registration list."""
 
 from .ai_rigging import CLASSES as AI_RIGGING_CLASSES
+from .ai_inbetween import CLASSES as AI_MOTION_CLASSES
 from .animation import SAS_OT_generate_contact_inbetweens, SAS_OT_generate_inbetweens
 from .contacts import CLASSES as CONTACT_CLASSES
 from .export import SAS_OT_export_glb
@@ -11,6 +12,6 @@ from .rigging import CLASSES as RIGGING_CLASSES
 
 
 CLASSES = (
-    *RIGGING_CLASSES, *AI_RIGGING_CLASSES, *POSE_EDITOR_CLASSES, *CONTACT_CLASSES, *POSE_LIBRARY_CLASSES,
+    *RIGGING_CLASSES, *AI_RIGGING_CLASSES, *AI_MOTION_CLASSES, *POSE_EDITOR_CLASSES, *CONTACT_CLASSES, *POSE_LIBRARY_CLASSES,
     SAS_OT_generate_inbetweens, SAS_OT_generate_contact_inbetweens, SAS_OT_export_glb,
 )

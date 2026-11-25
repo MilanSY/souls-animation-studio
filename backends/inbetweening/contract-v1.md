@@ -1,4 +1,6 @@
-# Proposition de contrat externe `sas.inbetween` v1 — aucun moteur activé
+# Contrat externe `sas.inbetween` v1
+
+Le [MLP expérimental du Sprint 4](../../docs/sprint-4.md) utilise un sous-ensemble strict de v1 : chaîne planaire, poses complètes, aucun contact. Les garanties générales ci-dessous ne sont pas assouplies ; un profil qu'un moteur ne sait pas traiter doit être refusé.
 
 L'adaptateur d'animation reste propriétaire de l'action, de son slot, du rig et du bake. Un moteur local dans son propre environnement ne reçoit que `request.json` et écrit `response.json` dans un dossier temporaire. Pas de réseau, d'objets Blender, d'assets d'accessoires, de chemins de projet ni de sérialisation exécutable. JSON UTF-8, champs exacts, version entière obligatoire, tableaux à dimensions bornées, doublons et nombres non finis refusés. Chaque job a un `request_id` opaque unique copié dans la réponse ; pas de fallback implicite à la référence CPU.
 
